@@ -3754,3 +3754,557 @@ WHERE TABLE_SCHEMA = 'database_name'
   AND DATA_FREE > 0;
 
 -- 6. О
+```
+**Too many connections:**
+```sql
+SHOW STATUS LIKE 'Threads_connected';
+SET GLOBAL max_connections = 500;
+SELECT * FROM information_schema.PROCESSLIST WHERE COMMAND = 'Sleep';
+```
+
+**Deadlock:**
+```sql
+SHOW ENGINE INNODB STATUS\G;
+SET GLOBAL innodb_print_all_deadlocks = ON;
+```
+
+**Репликация отстает:**
+```sql
+SHOW SLAVE STATUS\G;
+SET GLOBAL slave_parallel_workers = 4;
+```
+
+### 💻 Задание
+
+1. Создай медленный запрос и найди его
+2. Проверь блокировки
+3. Найди таблицы без PRIMARY KEY
+4. Проверь размер binary logs
+
+### 🚀 Бонус
+- Используй `pt-stalk`
+- Создай скрипт с алертами
+- Настрой ротацию логов
+
+---
+
+## Модуль 8: Продвинутые возможности (30 минут)
+
+### 🎯 Напоминалка
+
+**Процедуры:**
+```sql
+DELIMITER $$
+CREATE PROCEDURE GetUserById(IN user_id INT)
+BEGIN
+  SELECT * FROM users WHERE id = user_id;
+END$$
+DELIMITER ;
+
+CALL GetUserById(1);
+```
+
+**Триггеры:**
+```sql
+DELIMITER $$
+CREATE TRIGGER users_before_insert
+BEFORE INSERT ON users
+FOR EACH ROW
+BEGIN
+  SET NEW.created_at = NOW();
+END$$
+DELIMITER ;
+```
+
+**События:**
+```sql
+SET GLOBAL event_scheduler = ON;
+
+CREATE EVENT daily_cleanup
+ON SCHEDULE EVERY 1 DAY
+DO
+  DELETE FROM logs WHERE created_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
+```
+
+**JSON:**
+```sql
+CREATE TABLE products (id INT, attributes JSON);
+INSERT INTO products VALUES (1, '{"brand": "Dell", "ram": "16GB"}');
+SELECT attributes->'$.brand' FROM products;
+UPDATE products SET attributes = JSON_SET(attributes, '$.warranty', '2 years');
+```
+
+**Window Functions (8.0+):**
+```sql
+SELECT name, salary,
+  ROW_NUMBER() OVER (ORDER BY salary DESC) as rank
+FROM employees;
+```
+
+**CTE (8.0+):**
+```sql
+WITH user_orders AS (
+  SELECT user_id, COUNT(*) as count FROM orders GROUP BY user_id
+)
+SELECT u.name, uo.count FROM users u JOIN user_orders uo ON u.id = uo.user_id;
+```
+
+### 💻 Задание
+
+1. Создай процедуру для подсчета сотрудников
+2. Создай триггер для `updated_at`
+3. Создай событие для очистки логов
+4. Работай с JSON данными
+5. Создай FULLTEXT индекс
+
+### 🚀 Бонус
+- Рекурсивный CTE
+- Window Functions для running total
+- Партиционирование таблицы
+
+---
+
+## Финальный проект (60 минут)
+
+### Система мониторинга MySQL
+
+**1. База данных:**
+```sql
+CREATE DATABASE mysql_monitoring;
+USE mysql_monitoring;
+
+CREATE TABLE metrics_history (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  metric_name VARCHAR(100),
+  metric_value DECIMAL(15,2),
+  collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  INDEX (metric_name, collected_at)
+);
+
+CREATE TABLE alerts (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  alert_type VARCHAR(50),
+  severity ENUM('info', 'warning', 'critical'),
+  message TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE backup_history (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  backup_type ENUM('full', 'incremental'),
+  database_name VARCHAR(64),
+  file_path VARCHAR(500),
+  file_size BIGINT,
+  status ENUM('success', 'failed'),
+  started_at TIMESTAMP,
+  completed_at TIMESTAMP
+);
+```
+
+**2. Процедуры:**
+```sql
+DELIMITER $$
+CREATE PROCEDURE CollectMetrics()
+BEGIN
+  INSERT INTO metrics_history (metric_name, metric_value)
+  SELECT 'threads_connected', VARIABLE_VALUE 
+  FROM performance_schema.global_status 
+  WHERE VARIABLE_NAME = 'Threads_connected';
+  
+  INSERT INTO metrics_history (metric_name, metric_value)
+  SELECT 'slow_queries', VARIABLE_VALUE 
+  FROM performance_schema.global_status 
+  WHERE VARIABLE_NAME = 'Slow_queries';
+END$$
+
+CREATE PROCEDURE CheckSystemHealth()
+BEGIN
+  DECLARE conn_usage DECIMAL(5,2);
+  
+  SELECT ROUND(100 * current / max, 2) INTO conn_usage
+  FROM (
+    SELECT VARIABLE_VALUE as current 
+    FROM performance_schema.global_status 
+    WHERE VARIABLE_NAME = 'Threads_connected'
+  ) t,
+  (
+    SELECT VARIABLE_VALUE as max 
+    FROM performance_schema.global_variables 
+    WHERE VARIABLE_NAME = 'max_connections'
+  ) m;
+  
+  IF conn_usage > 80 THEN
+    INSERT INTO alerts (alert_type, severity, message)
+    VALUES ('high_connections', 'warning', CONCAT('Usage: ', conn_usage, '%'));
+  END IF;
+END$$
+DELIMITER ;
+```
+
+**3. События:**
+```sql
+CREATE EVENT collect_metrics_event
+ON SCHEDULE EVERY 5 MINUTE
+DO CALL CollectMetrics();
+
+CREATE EVENT health_check_event
+ON SCHEDULE EVERY 10 MINUTE
+DO CALL CheckSystemHealth();
+
+CREATE EVENT cleanup_old_metrics
+ON SCHEDULE EVERY 1 DAY
+DO DELETE FROM metrics_history WHERE collected_at < DATE_SUB(NOW(), INTERVAL 30 DAY);
+```
+
+**4. Скрипт бэкапа (backup_mysql.sh):**
+```bash
+#!/bin/bash
+set -euo pipefail
+
+BACKUP_DIR="/backup/mysql"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=7
+DB_USER="backup_user"
+DB_PASS="backup_password"
+
+mkdir -p "$BACKUP_DIR"
+
+# Бэкап
+START_TIME=$(date +'%Y-%m-%d %H:%M:%S')
+BACKUP_FILE="$BACKUP_DIR/backup_${DATE}.sql.gz"
+
+if mysqldump -u "$DB_USER" -p"$DB_PASS" \
+    --all-databases \
+    --single-transaction \
+    --routines --triggers --events \
+    | gzip > "$BACKUP_FILE"; then
+    
+    END_TIME=$(date +'%Y-%m-%d %H:%M:%S')
+    FILE_SIZE=$(stat -f%z "$BACKUP_FILE" 2>/dev/null || stat -c%s "$BACKUP_FILE")
+    
+    mysql -u "$DB_USER" -p"$DB_PASS" mysql_monitoring <<EOF
+INSERT INTO backup_history 
+(backup_type, database_name, file_path, file_size, status, started_at, completed_at)
+VALUES ('full', 'all', '$BACKUP_FILE', $FILE_SIZE, 'success', '$START_TIME', '$END_TIME');
+EOF
+    
+    echo "Backup successful: $BACKUP_FILE"
+    find "$BACKUP_DIR" -name "*.sql.gz" -mtime +$RETENTION_DAYS -delete
+else
+    echo "Backup failed!"
+    exit 1
+fi
+```
+
+**5. Скрипт мониторинга (mysql_monitor.sh):**
+```bash
+#!/bin/bash
+set -euo pipefail
+
+DB_USER="monitor_user"
+DB_PASS="monitor_password"
+
+check_connections() {
+    local result=$(mysql -u "$DB_USER" -p"$DB_PASS" -sN <<EOF
+SELECT ROUND(100 * current / max, 2), current, max
+FROM (
+  SELECT VARIABLE_VALUE as current 
+  FROM performance_schema.global_status 
+  WHERE VARIABLE_NAME = 'Threads_connected'
+) t,
+(
+  SELECT VARIABLE_VALUE as max 
+  FROM performance_schema.global_variables 
+  WHERE VARIABLE_NAME = 'max_connections'
+) m;
+EOF
+    )
+    
+    local usage=$(echo "$result" | awk '{print $1}')
+    if (( $(echo "$usage > 80" | bc -l) )); then
+        echo "ALERT: Connection usage is $usage%"
+    fi
+}
+
+check_replication() {
+    local lag=$(mysql -u "$DB_USER" -p"$DB_PASS" -sN \
+        -e "SHOW SLAVE STATUS\G" 2>/dev/null | \
+        grep "Seconds_Behind_Master" | awk '{print $2}')
+    
+    if [ ! -z "$lag" ] && [ "$lag" != "NULL" ] && [ "$lag" -gt 60 ]; then
+        echo "ALERT: Replication lag is $lag seconds"
+    fi
+}
+
+check_disk_space() {
+    local usage=$(df -h /var/lib/mysql | awk 'NR==2 {print $5}' | sed 's/%//')
+    if [ "$usage" -gt 85 ]; then
+        echo "ALERT: Disk usage is $usage%"
+    fi
+}
+
+echo "=== MySQL Health Check $(date) ==="
+check_connections
+check_replication
+check_disk_space
+echo "=== Check completed ==="
+```
+
+**6. Cron задачи:**
+```bash
+# Добавить в crontab -e
+*/5 * * * * /usr/local/bin/mysql_monitor.sh >> /var/log/mysql_monitor.log 2>&1
+0 2 * * * /usr/local/bin/backup_mysql.sh >> /var/log/mysql_backup.log 2>&1
+```
+
+### Задачи:
+
+1. Создай все таблицы
+2. Создай процедуры и события
+3. Реализуй скрипты бэкапа и мониторинга
+4. Настрой автоматический запуск
+5. Протестируй всю систему
+
+---
+
+## Справочная секция
+
+### Полезные запросы
+
+**Размеры:**
+```sql
+-- Размер баз данных
+SELECT table_schema, ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) AS size_mb
+FROM information_schema.TABLES GROUP BY table_schema;
+
+-- Размер таблиц
+SELECT table_name, ROUND((data_length + index_length) / 1024 / 1024, 2) AS size_mb
+FROM information_schema.TABLES WHERE table_schema = 'database_name'
+ORDER BY size_mb DESC;
+```
+
+**Производительность:**
+```sql
+-- Топ запросов
+SELECT SUBSTRING(DIGEST_TEXT, 1, 100), COUNT_STAR, 
+  ROUND(AVG_TIMER_WAIT/1000000000000, 2) AS avg_sec
+FROM performance_schema.events_statements_summary_by_digest
+ORDER BY AVG_TIMER_WAIT DESC LIMIT 10;
+
+-- Неиспользуемые индексы
+SELECT * FROM sys.schema_unused_indexes;
+```
+
+**Блокировки:**
+```sql
+SELECT * FROM information_schema.INNODB_TRX;
+SELECT * FROM information_schema.INNODB_LOCKS;
+```
+
+### One-liners
+
+```bash
+# Статус
+mysql -e "SHOW STATUS LIKE 'Threads_connected';"
+
+# Размер баз
+mysql -e "SELECT table_schema, ROUND(SUM(data_length + index_length) / 1024 / 1024, 2) 
+FROM information_schema.TABLES GROUP BY table_schema;"
+
+# Процессы
+mysql -e "SHOW PROCESSLIST;"
+
+# Репликация
+mysql -e "SHOW SLAVE STATUS\G" | grep -E "Running|Behind"
+```
+
+### Конфигурация my.cnf
+
+```ini
+[mysqld]
+# Основное
+max_connections = 500
+max_connect_errors = 100
+
+# InnoDB
+innodb_buffer_pool_size = 8G
+innodb_log_file_size = 1G
+innodb_flush_log_at_trx_commit = 2
+innodb_flush_method = O_DIRECT
+
+# Временные таблицы
+tmp_table_size = 128M
+max_heap_table_size = 128M
+
+# Slow Query Log
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/mysql-slow.log
+long_query_time = 2
+
+# Binary Log
+log-bin = /var/log/mysql/mysql-bin
+binlog_format = ROW
+expire_logs_days = 7
+
+# Репликация
+server-id = 1
+gtid_mode = ON
+enforce_gtid_consistency = ON
+
+# Безопасность
+skip-name-resolve = 1
+local_infile = 0
+```
+
+---
+
+## Чеклист навыков
+
+После прохождения курса ты должен уметь:
+
+### Базовые навыки:
+- [ ] Подключаться к MySQL
+- [ ] Выполнять CRUD операции
+- [ ] Создавать и изменять таблицы
+- [ ] Работать с пользователями и правами
+
+### Оптимизация:
+- [ ] Создавать индексы
+- [ ] Читать EXPLAIN
+- [ ] Оптимизировать запросы
+- [ ] Работать с Performance Schema
+
+### Backup:
+- [ ] Делать полные и инкрементальные бэкапы
+- [ ] Восстанавливать данные
+- [ ] Использовать mysqldump и XtraBackup
+- [ ] Настраивать Point-in-Time Recovery
+
+### Репликация:
+- [ ] Настраивать Master-Slave
+- [ ] Работать с GTID
+- [ ] Мониторить репликацию
+- [ ] Выполнять failover
+
+### Мониторинг:
+- [ ] Собирать метрики
+- [ ] Использовать Performance Schema
+- [ ] Анализировать slow query log
+- [ ] Работать с Percona Toolkit
+
+### Troubleshooting:
+- [ ] Диагностировать проблемы
+- [ ] Решать блокировки
+- [ ] Восстанавливать таблицы
+- [ ] Работать с deadlocks
+
+---
+
+## План повторения
+
+### Первое прохождение (3-4 часа):
+- Модули 1-4 обязательно
+- Модули 5-6 базовые задания
+- Модуль 7 прочитать
+- Начать финальный проект
+
+### Повторное прохождение (через 6 месяцев):
+- Фокус на бонусные задания
+- Модули 5-8 полностью
+- Доделать финальный проект
+- Добавить свои кейсы
+
+### Для закрепления:
+- Автоматизируй бэкапы
+- Настрой мониторинг
+- Оптимизируй медленные запросы
+- Практикуй troubleshooting
+
+---
+
+## Советы
+
+1. **Используй тестовую среду** - не экспериментируй на production
+2. **Читай EXPLAIN** - каждый запрос анализируй
+3. **Веди заметки** - создай базу знаний
+4. **Практикуй на реальных данных**
+5. **Изучай логи** - error log и slow query log
+6. **Автоматизируй** - любую повторяющуюся задачу
+7. **Мониторь постоянно** - настрой систему мониторинга
+8. **Делай бэкапы** - и проверяй восстановление!
+9. **Тестируй перед production**
+10. **Учись у других** - читай блоги, смотри конференции
+
+---
+
+## Типичные ошибки
+
+❌ SELECT * в production  
+✅ SELECT id, name, email
+
+❌ Нет индексов на JOIN колонках  
+✅ CREATE INDEX idx_user_id ON orders(user_id)
+
+❌ Функции в WHERE  
+✅ Используй диапазоны дат
+
+❌ N+1 запросы  
+✅ Используй JOIN
+
+❌ Нет транзакций  
+✅ START TRANSACTION; ... COMMIT;
+
+❌ Не ограничивать DELETE  
+✅ DELETE ... LIMIT 10000;
+
+❌ Игнорировать WARNINGS  
+✅ SHOW WARNINGS;
+
+❌ Пароли в открытом виде  
+✅ mysql_config_editor
+
+---
+
+## Дополнительные ресурсы
+
+**Документация:**
+- MySQL: https://dev.mysql.com/doc/
+- Percona: https://docs.percona.com/
+
+**Книги:**
+- "High Performance MySQL" by Baron Schwartz
+- "MySQL Troubleshooting" by Sveta Smirnova
+
+**Инструменты:**
+- Percona Toolkit
+- PMM (Percona Monitoring and Management)
+- mycli
+- mysqltuner
+
+**Онлайн:**
+- MySQL Planet
+- Percona Blog
+- Use The Index, Luke
+
+---
+
+## Заключение
+
+**Проходи этот курс каждые 6-12 месяцев!**
+
+🎯 **Метрики успеха:**
+- Настроить репликацию за 30 минут
+- Найти медленный запрос за 5 минут
+- Восстановить БД без паники
+- Понимать 90% метрик мониторинга
+
+🚀 **Следующие шаги:**
+1. Пройди весь курс
+2. Примени на своих проектах
+3. Автоматизируй задачи
+4. Настрой мониторинг
+5. Вернись через 6 месяцев
+
+💪 **Remember: In MySQL we trust, but always backup!**
+
+**Удачи! Пусть твои запросы будут быстрыми, а бэкапы надежными!** 🎉🐬

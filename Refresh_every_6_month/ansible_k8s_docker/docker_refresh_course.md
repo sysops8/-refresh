@@ -171,7 +171,7 @@ server.listen(3000, () => {
 
 ```
 **Dockerfile for nodejs (multi-stage, non-root):**
-```
+```dockerfile
 # ---------- build ----------
 FROM node:20-alpine AS builder
 WORKDIR /app

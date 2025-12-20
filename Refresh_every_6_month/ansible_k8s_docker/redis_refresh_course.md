@@ -3591,7 +3591,7 @@ bash
 
 bash
 
-````bash
+```bash
 # Тиры
 - Basic: Single node, 99.9% SLA
 - Standard: HA с репликой, 99.9% SLA

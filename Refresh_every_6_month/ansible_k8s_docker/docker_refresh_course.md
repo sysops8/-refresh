@@ -147,6 +147,10 @@ RUN go mod download
 COPY . .
 
 # Статическая сборка (совместима с Alpine)
+# Почему CGO_ENABLED=0 важно:
+# - Alpine использует musl-libc
+# - бинарники, собранные с glibc, там не запустятся
+# - статическая сборка делает приложение переносимым
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o myapp
 
 # Финальный образ

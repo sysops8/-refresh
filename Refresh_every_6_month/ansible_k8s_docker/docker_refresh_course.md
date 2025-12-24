@@ -131,8 +131,9 @@ func main() {
 ```
 **Multi-stage build (важно!):**
 ```dockerfile
+# dnf install go -y (версию go нужно прописать в FROM)
 # Стадия сборки
-FROM golang:1.21 AS builder
+FROM golang:1.24 AS builder
 WORKDIR /app
 COPY . .
 RUN go build -o myapp

@@ -4141,6 +4141,7 @@ $HELM_KUBECONTEXT                        # Kubecontext
 - Финальный проект полностью с всеми best practices
 
 ### Для закрепления:
+
 - Автоматизируй деплой с помощью CI/CD (GitHub Actions, GitLab CI, ArgoCD)
 - Реализуй GitOps подход: храни Helm charts и values в Git, применяй через ArgoCD
 - Настрой автоматическое тестирование charts при каждом изменении
@@ -4151,12 +4152,14 @@ $HELM_KUBECONTEXT                        # Kubecontext
 
 Дополнительные ресурсы
 Официальная документация:
+
     Helm Docs
     Chart Template Guide
     Best Practices
     Helm Hub (Artifact Hub)
     
 Полезные инструменты:
+
     - kubeval – валидация K8s манифестов
     - helm-docs – генерация документации
     - helm-unittest – unit-тесты для charts
@@ -4165,11 +4168,13 @@ $HELM_KUBECONTEXT                        # Kubecontext
     - chart-testing – тестирование charts в CI
 
 Сообщество и блоги:
+
     - Bitnami Helm Charts – примеры production-ready charts
     - Artifact Hub – поиск готовых charts
     - Helm на Medium – статьи и туториалы
 
 Практические задания для самостоятельной работы:
+
     - Мигрируй существующие K8s манифесты в Helm chart
     - Настрой деплой одного chart в несколько кластеров
     - Реализуй canary-деплоймент с помощью Helm hooks и Flagger
@@ -4179,6 +4184,7 @@ $HELM_KUBECONTEXT                        # Kubecontext
 Итог
 
 За 2–3 часа этого курса ты:
+
     ✅ Освежил в памяти ключевые концепции Helm
     ✅ Создал и настроил несколько charts разной сложности
     ✅ Узнал про зависимости, hooks, plugins и репозитории

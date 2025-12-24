@@ -131,7 +131,9 @@ func main() {
 ```
 **Multi-stage build (важно!):**
 ```dockerfile
-# dnf install go -y (версию go нужно прописать в FROM)
+# dnf install go -y (версию go нужно прописать в FROM и выполнить 2 команды снизу чтобы создался файл go.mod с зависимостями)
+# go mod init myapp
+# go mod tidy
 # Стадия сборки
 FROM golang:1.24 AS builder
 WORKDIR /app

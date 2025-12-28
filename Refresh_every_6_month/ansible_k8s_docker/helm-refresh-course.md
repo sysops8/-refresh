@@ -4141,70 +4141,873 @@ $HELM_KUBECONTEXT                        # Kubecontext
 - Финальный проект полностью с всеми best practices
 
 ### Для закрепления:
+- Автоматизируй деплой своих проектов через Helm
+- Создай собственную библиотеку common charts
+- Настрой CI/CD с автоматической публикацией charts
+- Попробуй разные Helm plugins
+- Изучи Helmfile для управления множеством releases
+- Настрой GitOps с ArgoCD
+- Создай Helm Operator для своего приложения
+- Участвуй в Open Source Helm charts
 
-- Автоматизируй деплой с помощью CI/CD (GitHub Actions, GitLab CI, ArgoCD)
-- Реализуй GitOps подход: храни Helm charts и values в Git, применяй через ArgoCD
-- Настрой автоматическое тестирование charts при каждом изменении
-- Внедри проверку безопасности (kube-score, checkov, trivy) в pipeline
-- Создай свою библиотеку common charts для повторного использования
-- Организуй внутренний Helm repository (ChartMuseum, Harbor, Nexus)
-- Настрой автоматический выпуск версий при тегировании в Git
+### Дополнительные ресурсы:
+- **Helm Documentation** - https://helm.sh/docs/
+- **Artifact Hub** - https://artifacthub.io/
+- **Helm Best Practices** - https://helm.sh/docs/chart_best_practices/
+- **Helm GitHub** - https://github.com/helm/helm
+- **Bitnami Charts** - отличные примеры quality charts
+- **Helm Community** - Slack, GitHub Discussions
+- **CNCF Helm Training** - бесплатные курсы
+- **Awesome Helm** - список ресурсов на GitHub
 
-Дополнительные ресурсы
-Официальная документация:
+---
 
-    Helm Docs
-    Chart Template Guide
-    Best Practices
-    Helm Hub (Artifact Hub)
-    
-### Полезные инструменты:
+## Troubleshooting Guide
 
-- kubeval – валидация K8s манифестов
-- helm-docs – генерация документации
-- helm-unittest – unit-тесты для charts
-- helm-secrets – работа с зашифрованными values
-- helm-diff – просмотр изменений перед применением
-- chart-testing – тестирование charts в CI
+### Проблема: Chart не устанавливается
 
-Сообщество и блоги:
+```bash
+# Диагностика
+helm install my-app ./chart --debug --dry-run
+helm lint ./chart
+helm template my-app ./chart --debug
 
-    - Bitnami Helm Charts – примеры production-ready charts
-    - Artifact Hub – поиск готовых charts
-    - Helm на Medium – статьи и туториалы
+# Типичные причины:
+# - Синтаксическая ошибка в templates
+# - Неправильный YAML
+# - Отсутствующие required values
+# - Проблемы с зависимостями
+```
 
-Практические задания для самостоятельной работы:
+### Проблема: Dependencies не скачиваются
 
-    - Мигрируй существующие K8s манифесты в Helm chart
-    - Настрой деплой одного chart в несколько кластеров
-    - Реализуй canary-деплоймент с помощью Helm hooks и Flagger
-    - Создай chart, который динамически генерирует конфигурацию на основе внешних источников (Consul, Vault)
-    - Настрой мониторинг Helm releases с помощью Prometheus и Alertmanager
+```bash
+# Проверка
+cat Chart.yaml | grep -A 10 dependencies
+helm dependency list .
 
-Итог
+# Решение
+helm dependency update .
+helm dependency build .
 
-За 2–3 часа этого курса ты:
+# Если репозиторий недоступен
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm repo update
+```
 
-    ✅ Освежил в памяти ключевые концепции Helm
-    ✅ Создал и настроил несколько charts разной сложности
-    ✅ Узнал про зависимости, hooks, plugins и репозитории
-    ✅ Познакомился с продвинутыми техниками (named templates, validation, multi-environment)
-    ✅ Построил production-ready umbrella chart для микросервисного приложения
-    ✅ Получил шпаргалки и чеклисты для ежедневной работы
-    
-Что дальше?
+### Проблема: Values не применяются
 
-    - Примени полученные знания в своем проекте
-    - Автоматизируй рутину с помощью Helm plugins
-    - Внедри best practices из чеклиста
-    - Исследуй интеграцию с GitOps-инструментами (ArgoCD, Flux)
-    - Участвуй в разработке open-source charts
+```bash
+# Проверка priorities
+helm get values my-release -n namespace
 
-Формула успеха:
+# Debug
+helm template my-release ./chart --set key=value --debug
 
-- Практика → Автоматизация → Документация → Совершенствование
+# Проверка merge
+helm template my-release ./chart -f values.yaml -f custom.yaml --debug
 
-Удачи в использовании Helm! 🚀
+# Типичные причины:
+# - Неправильный путь к value (typo)
+# - Values переопределяются позже
+# - Используется template вместо include
+```
 
-Курс составлен для ежегодного/полугодового повторения.
-Сохрани шпаргалки, возвращайся к сложным модулям и не забывай практиковаться.
+### Проблема: Release в failed состоянии
+
+```bash
+# Статус
+helm status my-release -n namespace
+helm history my-release -n namespace
+
+# Логи
+kubectl get events -n namespace --sort-by='.lastTimestamp'
+kubectl logs -n namespace <pod-name>
+
+# Решение
+# Попытка upgrade
+helm upgrade my-release ./chart -n namespace
+
+# Или rollback
+helm rollback my-release <revision> -n namespace
+
+# Или полное удаление
+helm uninstall my-release -n namespace
+kubectl delete all -l app.kubernetes.io/instance=my-release -n namespace
+```
+
+### Проблема: Hooks не выполняются
+
+```bash
+# Проверка hooks
+helm get hooks my-release -n namespace
+
+# Проверка Job/Pod status
+kubectl get jobs -n namespace
+kubectl get pods -n namespace
+kubectl logs -n namespace <hook-pod>
+
+# Типичные причины:
+# - Неправильный hook annotation
+# - Hook weight конфликт
+# - Timeout
+# - ImagePullBackOff
+# - Ошибка в команде hook
+```
+
+### Проблема: Template рендерится неправильно
+
+```bash
+# Debug рендеринга
+helm template my-release ./chart --debug
+
+# Проверка конкретного template
+helm template my-release ./chart --show-only templates/deployment.yaml
+
+# Проверка с values
+helm template my-release ./chart -f values.yaml --debug
+
+# Типичные причины:
+# - Неправильный синтаксис Go templates
+# - Неправильный scope (используй $ для root)
+# - Проблемы с whitespace control
+# - Функция не существует или неправильно вызвана
+```
+
+### Проблема: Upgrade зависает
+
+```bash
+# Проверка status
+helm status my-release -n namespace
+kubectl get pods -n namespace -w
+
+# Принудительное завершение
+helm rollback my-release <revision> -n namespace --force
+
+# Если не помогает
+helm uninstall my-release -n namespace --no-hooks
+
+# Типичные причины:
+# - Readiness probe не проходит
+# - ImagePullBackOff
+# - Resource limits слишком низкие
+# - PVC не может быть создан
+```
+
+### Проблема: Secrets видны в plain text
+
+```bash
+# НИКОГДА не храни secrets в values.yaml в Git
+
+# Решения:
+# 1. helm-secrets plugin
+helm secrets install my-release ./chart -f secrets.yaml
+
+# 2. External Secrets Operator
+# 3. Sealed Secrets
+# 4. SOPS
+# 5. Vault integration
+
+# Для CI/CD используй environment variables
+helm install my-release ./chart \
+  --set database.password=$DB_PASSWORD \
+  --set api.key=$API_KEY
+```
+
+---
+
+## Расширенные техники и паттерны
+
+### Pattern 1: Multi-tenant Charts
+
+```yaml
+# values.yaml
+tenants:
+  - name: tenant-a
+    namespace: tenant-a
+    domain: tenant-a.example.com
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+  - name: tenant-b
+    namespace: tenant-b
+    domain: tenant-b.example.com
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# templates/tenant-deployment.yaml
+{{- range .Values.tenants }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .name }}-app
+  namespace: {{ .namespace }}
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      tenant: {{ .name }}
+  template:
+    metadata:
+      labels:
+        tenant: {{ .name }}
+    spec:
+      containers:
+      - name: app
+        image: myapp:latest
+        resources:
+          {{- toYaml .resources | nindent 10 }}
+        env:
+        - name: TENANT_ID
+          value: {{ .name }}
+        - name: DOMAIN
+          value: {{ .domain }}
+{{- end }}
+```
+
+### Pattern 2: Feature Flags
+
+```yaml
+# values.yaml
+features:
+  newUI:
+    enabled: true
+    rolloutPercentage: 50
+  betaAPI:
+    enabled: false
+  caching:
+    enabled: true
+    ttl: 3600
+
+# templates/deployment.yaml
+env:
+{{- if .Values.features.newUI.enabled }}
+- name: FEATURE_NEW_UI
+  value: "true"
+- name: NEW_UI_ROLLOUT
+  value: {{ .Values.features.newUI.rolloutPercentage | quote }}
+{{- end }}
+{{- if .Values.features.betaAPI.enabled }}
+- name: FEATURE_BETA_API
+  value: "true"
+{{- end }}
+{{- if .Values.features.caching.enabled }}
+- name: CACHE_ENABLED
+  value: "true"
+- name: CACHE_TTL
+  value: {{ .Values.features.caching.ttl | quote }}
+{{- end }}
+```
+
+### Pattern 3: Blue-Green Deployment через Helm
+
+```bash
+# Установка blue версии
+helm install app-blue ./chart \
+  -f values-blue.yaml \
+  --set version=blue \
+  --set image.tag=v1.0.0 \
+  -n production
+
+# Установка green версии (новая)
+helm install app-green ./chart \
+  -f values-green.yaml \
+  --set version=green \
+  --set image.tag=v2.0.0 \
+  -n production
+
+# Service указывает на blue
+# После тестирования green, переключаем Service
+kubectl patch service app-service -n production \
+  -p '{"spec":{"selector":{"version":"green"}}}'
+
+# Если всё хорошо, удаляем blue
+helm uninstall app-blue -n production
+```
+
+### Pattern 4: ConfigMap Reload Pattern
+
+```yaml
+# templates/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "app.fullname" . }}
+spec:
+  template:
+    metadata:
+      annotations:
+        # Пересоздать Pod при изменении ConfigMap
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+    spec:
+      containers:
+      - name: app
+        image: myapp:latest
+        # ...
+```
+
+### Pattern 5: Init Container для миграций
+
+```yaml
+# templates/deployment.yaml
+spec:
+  template:
+    spec:
+      initContainers:
+      - name: migration
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        command:
+        - /app/migrate
+        - up
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "app.fullname" . }}-db
+              key: url
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+      containers:
+      - name: app
+        # main app container
+```
+
+### Pattern 6: Shared Library Chart
+
+```yaml
+# common-lib/templates/_deployment.tpl
+{{- define "common.deployment" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "common.fullname" . }}
+  labels:
+    {{- include "common.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "common.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "common.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ .Chart.Name }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        {{- if .Values.resources }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        {{- end }}
+{{- end }}
+
+# Использование в другом chart
+# Chart.yaml
+dependencies:
+  - name: common-lib
+    version: "1.0.0"
+    repository: "file://../common-lib"
+
+# templates/deployment.yaml
+{{- include "common.deployment" . }}
+```
+
+### Pattern 7: Dynamic Environments через Helmfile
+
+```yaml
+# helmfile.yaml
+environments:
+  dev:
+    values:
+    - environments/dev/values.yaml
+  staging:
+    values:
+    - environments/staging/values.yaml
+  production:
+    values:
+    - environments/production/values.yaml
+
+releases:
+  - name: myapp-{{ .Environment.Name }}
+    namespace: {{ .Environment.Name }}
+    chart: ./charts/myapp
+    values:
+    - values.yaml
+    - environments/{{ .Environment.Name }}/values.yaml
+    set:
+    - name: environment
+      value: {{ .Environment.Name }}
+
+# Использование
+helmfile -e dev sync
+helmfile -e production sync
+```
+
+### Pattern 8: Composable Charts (Parent-Child)
+
+```yaml
+# parent-chart/values.yaml
+global:
+  imageRegistry: docker.io
+  storageClass: fast-ssd
+
+app:
+  enabled: true
+  replicaCount: 3
+
+database:
+  enabled: true
+  primary:
+    persistence:
+      size: 10Gi
+      storageClass: {{ .Values.global.storageClass }}
+
+# child chart может использовать global values
+# child-chart/templates/deployment.yaml
+image: {{ .Values.global.imageRegistry }}/myapp:latest
+```
+
+---
+
+## Helm в CI/CD
+
+### GitHub Actions Workflow
+
+```yaml
+# .github/workflows/helm.yaml
+name: Helm Chart CI/CD
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'charts/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'charts/**'
+
+jobs:
+  lint-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+
+      - name: Set up chart-testing
+        uses: helm/chart-testing-action@v2.4.0
+
+      - name: Run chart-testing (lint)
+        run: ct lint --config ct.yaml
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.7.0
+
+      - name: Run chart-testing (install)
+        run: ct install --config ct.yaml
+
+  release:
+    needs: lint-test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Run chart-releaser
+        uses: helm/chart-releaser-action@v1.5.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push to OCI registry
+        run: |
+          for chart in charts/*; do
+            if [ -d "$chart" ]; then
+              helm package "$chart"
+              helm push $(basename "$chart")-*.tgz oci://ghcr.io/${{ github.repository_owner }}/charts
+            fi
+          done
+```
+
+### GitLab CI/CD Pipeline
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - lint
+  - test
+  - package
+  - deploy
+
+variables:
+  CHART_PATH: ./charts/myapp
+  HELM_VERSION: "3.12.0"
+
+lint:
+  stage: lint
+  image: alpine/helm:${HELM_VERSION}
+  script:
+    - helm lint ${CHART_PATH}
+    - helm template test ${CHART_PATH} --debug
+  only:
+    - merge_requests
+    - main
+
+test:
+  stage: test
+  image: alpine/helm:${HELM_VERSION}
+  script:
+    - helm plugin install https://github.com/helm-unittest/helm-unittest
+    - helm unittest ${CHART_PATH}
+  only:
+    - merge_requests
+    - main
+
+package:
+  stage: package
+  image: alpine/helm:${HELM_VERSION}
+  script:
+    - helm dependency update ${CHART_PATH}
+    - helm package ${CHART_PATH} --destination ./packages
+    - helm repo index ./packages --url https://${CI_PROJECT_PATH}/-/packages/helm
+  artifacts:
+    paths:
+      - packages/
+  only:
+    - main
+
+deploy-dev:
+  stage: deploy
+  image: alpine/helm:${HELM_VERSION}
+  script:
+    - helm upgrade --install myapp ${CHART_PATH} 
+      -f values-dev.yaml 
+      -n development 
+      --create-namespace
+      --wait
+  environment:
+    name: development
+  only:
+    - main
+
+deploy-prod:
+  stage: deploy
+  image: alpine/helm:${HELM_VERSION}
+  script:
+    - helm upgrade --install myapp ${CHART_PATH} 
+      -f values-prod.yaml 
+      -n production 
+      --create-namespace
+      --wait
+  environment:
+    name: production
+  when: manual
+  only:
+    - main
+```
+
+### ArgoCD Application для GitOps
+
+```yaml
+# argocd/application.yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: myapp
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/myorg/myrepo
+    targetRevision: HEAD
+    path: charts/myapp
+    helm:
+      valueFiles:
+        - values-prod.yaml
+      parameters:
+        - name: image.tag
+          value: v1.2.3
+        - name: replicaCount
+          value: "5"
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+```
+
+---
+
+## Helm Security Best Practices
+
+### 1. Image Security
+
+```yaml
+# Используй конкретные теги, не latest
+image:
+  repository: myapp
+  tag: "v1.2.3"  # не latest!
+  pullPolicy: IfNotPresent
+
+# Или используй digest для полной immutability
+image:
+  repository: myapp
+  digest: sha256:abc123...
+  pullPolicy: IfNotPresent
+
+# В template
+{{- if .Values.image.digest }}
+image: "{{ .Values.image.repository }}@{{ .Values.image.digest }}"
+{{- else }}
+image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+{{- end }}
+```
+
+### 2. Secret Management
+
+```yaml
+# ❌ ПЛОХО - secrets в values.yaml
+database:
+  password: "mysecretpassword"  # НИКОГДА так не делай!
+
+# ✅ ХОРОШО - используй external secrets
+database:
+  existingSecret: my-db-secret
+  secretKeys:
+    password: password
+
+# Или helm-secrets plugin
+# secrets.yaml (зашифрован)
+database:
+  password: ENC[AES256_GCM,data:...,type:str]
+
+# Или external-secrets operator
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: {{ include "app.fullname" . }}-db
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  target:
+    name: {{ include "app.fullname" . }}-db
+  data:
+  - secretKey: password
+    remoteRef:
+      key: database/credentials
+      property: password
+```
+
+### 3. RBAC Minimal Privileges
+
+```yaml
+# templates/serviceaccount.yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "app.fullname" . }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "app.fullname" . }}
+rules:
+# Только минимально необходимые права
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list"]
+  resourceNames:
+    - {{ include "app.fullname" . }}-config
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "app.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ include "app.fullname" . }}
+roleRef:
+  kind: Role
+  name: {{ include "app.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+```
+
+### 4. Network Policies
+
+```yaml
+# templates/networkpolicy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "app.fullname" . }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "app.selectorLabels" . | nindent 6 }}
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Разрешить только от ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Разрешить только к database и dns
+  - to:
+    - podSelector:
+        matchLabels:
+          app: postgresql
+    ports:
+    - protocol: TCP
+      port: 5432
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+    ports:
+    - protocol: UDP
+      port: 53
+```
+
+### 5. Pod Security Standards
+
+```yaml
+# templates/deployment.yaml
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: app
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
+          capabilities:
+            drop:
+            - ALL
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        - name: cache
+          mountPath: /app/cache
+      volumes:
+      - name: tmp
+        emptyDir: {}
+      - name: cache
+        emptyDir: {}
+```
+
+---
+
+## Заключение
+
+Поздравляю! Ты прошел курс по освежению знаний Helm.
+
+**Следующие шаги:**
+1. Практикуйся регулярно - создавай Helm charts для своих проектов
+2. Автоматизируй всё через Helm + GitOps
+3. Изучай смежные технологии: Kustomize, ArgoCD, Flux
+4. Создай библиотеку переиспользуемых charts
+5. Участвуй в Open Source Helm projects
+6. Делись знаниями - пиши посты, помогай новичкам
+
+**Помни:**
+- Helm - это мощный инструмент для управления K8s приложениями
+- Всегда следуй best practices и security guidelines
+- Документация - твой лучший друг
+- Community очень дружелюбное и готово помочь
+- Начинай с простого, усложняй постепенно
+
+**Чек-лист навыков после курса:**
+
+Базовые:
+- ✅ Работать с Helm CLI уверенно
+- ✅ Создавать и модифицировать charts
+- ✅ Использовать values для конфигурации
+- ✅ Работать с зависимостями
+- ✅ Управлять releases (install/upgrade/rollback)
+- ✅ Использовать репозитории
+
+Продвинутые:
+- ✅ Создавать сложные templates с Go templates
+- ✅ Использовать hooks для lifecycle management
+- ✅ Работать с plugins
+- ✅ Публиковать charts в репозитории
+- ✅ Настраивать multi-environment deployments
+- ✅ Использовать named templates и helpers
+
+Expert:
+- ✅ Создавать library charts
+- ✅ Настраивать CI/CD для Helm
+- ✅ Реализовывать сложные deployment паттерны
+- ✅ Обеспечивать security best practices
+- ✅ Интегрировать с GitOps (ArgoCD/Flux)
+- ✅ Troubleshooting сложных проблем
+- ✅ Оптимизировать charts для production
+
+**Дополнительное обучение:**
+- Изучи Helmfile для управления множеством releases
+- Попробуй Helm Operator для custom CRDs
+- Настрой monitoring и observability для Helm releases
+- Изучи advanced templating techniques
+- Практикуйся с real-world сценариями
+
+Проходи этот курс каждые 6-12 месяцев, чтобы оставаться в форме. Каждый раз ты будешь узнавать что-то новое и замечать, как выросли твои навыки!
+
+Happy Helming! ⎈ 🚀

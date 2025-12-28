@@ -2157,7 +2157,7 @@ infrastructure-automation/
         - name: Backup current version
           # Implementation
         
-- name: Deploy new version
+        - name: Deploy new version
           git:
             repo: "{{ app_repo }}"
             dest: "{{ app_path }}"

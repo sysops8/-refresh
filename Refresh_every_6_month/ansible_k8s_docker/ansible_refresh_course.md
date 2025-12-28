@@ -2157,7 +2157,426 @@ infrastructure-automation/
         - name: Backup current version
           # Implementation
         
-        - name: Deploy new version
+- name: Deploy new version
           git:
             repo: "{{ app_repo }}"
-            dest: "{{ app_path }
+            dest: "{{ app_path }}"
+            version: "{{ app_version }}"
+        
+        - name: Install dependencies
+          command: "{{ app_install_command }}"
+          args:
+            chdir: "{{ app_path }}"
+        
+        - name: Run database migrations
+          command: "{{ app_migrate_command }}"
+          args:
+            chdir: "{{ app_path }}"
+          when: run_migrations | default(false)
+        
+        - name: Start application
+          service:
+            name: myapp
+            state: started
+        
+        - name: Wait for application to be healthy
+          uri:
+            url: "http://{{ inventory_hostname }}:{{ app_port }}/health"
+            status_code: 200
+          register: health_check
+          until: health_check.status == 200
+          retries: 10
+          delay: 5
+        
+        - name: Add back to load balancer
+          # Implementation
+          delegate_to: "{{ loadbalancer_host }}"
+      
+      rescue:
+        - name: Rollback to previous version
+          command: "{{ rollback_script }}"
+          args:
+            chdir: "{{ app_path }}"
+        
+        - name: Restart application
+          service:
+            name: myapp
+            state: restarted
+        
+        - name: Notify team about failed deployment
+          debug:
+            msg: "Deployment failed on {{ inventory_hostname }}, rolled back"
+        
+        - name: Fail the deployment
+          fail:
+            msg: "Deployment failed, rollback completed"
+```
+
+**4. Дополнительные требования:**
+
+- **Тестирование**: Используй Molecule для тестирования каждой роли
+- **CI/CD**: Настрой GitHub Actions для автоматического линтинга и тестирования
+- **Документация**: README.md с описанием использования, структуры и примерами
+- **Безопасность**: Все секреты в Ansible Vault
+- **Идемпотентность**: Все playbook'и должны быть идемпотентными
+- **Логирование**: Централизованное логирование всех операций
+- **Мониторинг**: Dashboard в Grafana с основными метриками
+
+**5. Inventory структура:**
+
+**inventory/production/hosts:**
+```ini
+[loadbalancers]
+lb1.example.com
+lb2.example.com
+
+[webservers]
+web[1:3].example.com
+
+[appservers]
+app[1:5].example.com
+
+[databases]
+db1.example.com
+db2.example.com
+
+[cache]
+cache[1:2].example.com
+
+[monitoring]
+mon1.example.com
+
+[production:children]
+loadbalancers
+webservers
+appservers
+databases
+cache
+monitoring
+
+[production:vars]
+env=production
+datacenter=us-east-1
+```
+
+**inventory/production/group_vars/all.yml:**
+```yaml
+---
+# Common settings
+domain: example.com
+timezone: UTC
+ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+# Application settings
+app_name: myapp
+app_user: appuser
+app_group: appuser
+app_path: /opt/{{ app_name }}
+app_port: 8000
+
+# Database settings
+db_name: "{{ app_name }}_{{ env }}"
+db_user: "{{ app_name }}_user"
+db_host: "{{ groups['databases'][0] }}"
+db_port: 5432
+
+# Cache settings
+cache_host: "{{ groups['cache'][0] }}"
+cache_port: 6379
+
+# Monitoring
+monitoring_enabled: true
+prometheus_retention: 30d
+
+# Backup
+backup_enabled: true
+backup_retention_days: 30
+backup_destination: s3://backups-bucket/{{ env }}/
+```
+
+**group_vars/all/vault.yml (зашифрованный):**
+```yaml
+---
+vault_db_password: "super_secret_password"
+vault_admin_password: "admin_password"
+vault_ssl_key_passphrase: "ssl_passphrase"
+vault_aws_access_key: "AKIAIOSFODNN7EXAMPLE"
+vault_aws_secret_key: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+```
+
+**6. Примеры команд для выполнения:**
+
+```bash
+# Полная настройка инфраструктуры
+ansible-playbook -i inventory/production playbooks/site.yml --ask-vault-pass
+
+# Настройка только веб-серверов
+ansible-playbook -i inventory/production playbooks/site.yml --tags webserver
+
+# Деплой приложения версии 2.1.0
+ansible-playbook -i inventory/production playbooks/deploy.yml \
+  -e "app_version=2.1.0" \
+  --ask-vault-pass
+
+# Проверка без применения (dry-run)
+ansible-playbook -i inventory/production playbooks/site.yml \
+  --check --diff
+
+# Backup всех баз данных
+ansible-playbook -i inventory/production playbooks/backup.yml \
+  --tags database
+
+# Применить только на staging
+ansible-playbook -i inventory/staging playbooks/site.yml
+
+# Ограничить выполнение конкретными хостами
+ansible-playbook -i inventory/production playbooks/site.yml \
+  --limit "webservers:appservers"
+```
+
+**7. Дополнительные фичи для реализации:**
+
+**A. Автоматическое масштабирование:**
+```yaml
+# roles/appserver/tasks/scale.yml
+- name: Get current load
+  command: uptime
+  register: load
+  
+- name: Add instance if load is high
+  include_role:
+    name: cloud_provision
+  vars:
+    instance_count: 1
+  when: load.stdout | regex_search('load average: ([0-9.]+)') | float > 4.0
+```
+
+**B. Blue-Green деплой:**
+```yaml
+# playbooks/blue_green_deploy.yml
+- name: Deploy to green environment
+  hosts: appservers_green
+  tasks:
+    - include_role:
+        name: appserver
+    # Deploy new version
+
+- name: Switch traffic to green
+  hosts: loadbalancers
+  tasks:
+    - name: Update load balancer config
+      template:
+        src: lb_green.conf.j2
+        dest: /etc/nginx/conf.d/upstream.conf
+      notify: reload nginx
+
+- name: Verify green environment
+  hosts: appservers_green
+  tasks:
+    - name: Run smoke tests
+      # Health checks and tests
+```
+
+**C. Disaster Recovery:**
+```yaml
+# playbooks/disaster_recovery.yml
+- name: Restore from backup
+  hosts: all
+  tasks:
+    - name: Stop services
+      service:
+        name: "{{ item }}"
+        state: stopped
+      loop: "{{ services_to_stop }}"
+    
+    - name: Restore database
+      include_role:
+        name: database
+        tasks_from: restore
+    
+    - name: Restore application files
+      synchronize:
+        src: "{{ backup_location }}/{{ inventory_hostname }}/"
+        dest: "{{ app_path }}/"
+    
+    - name: Start services
+      service:
+        name: "{{ item }}"
+        state: started
+      loop: "{{ services_to_stop }}"
+```
+
+**D. Security Hardening:**
+```yaml
+# roles/common/tasks/security.yml
+- name: Configure SSH
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - { regexp: '^PermitRootLogin', line: 'PermitRootLogin no' }
+    - { regexp: '^PasswordAuthentication', line: 'PasswordAuthentication no' }
+    - { regexp: '^X11Forwarding', line: 'X11Forwarding no' }
+  notify: restart sshd
+
+- name: Install and configure fail2ban
+  apt:
+    name: fail2ban
+    state: present
+
+- name: Configure firewall rules
+  ufw:
+    rule: "{{ item.rule }}"
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+  loop:
+    - { rule: 'allow', port: '22', proto: 'tcp' }
+    - { rule: 'allow', port: '80', proto: 'tcp' }
+    - { rule: 'allow', port: '443', proto: 'tcp' }
+  notify: enable ufw
+
+- name: Enable automatic security updates
+  apt:
+    name: unattended-upgrades
+    state: present
+```
+
+### ✅ Критерии оценки финального проекта:
+
+1. **Функциональность (40%)**:
+   - Все роли работают корректно
+   - Playbook'и выполняются без ошибок
+   - Деплой работает с zero-downtime
+   - Rollback функционирует при ошибках
+
+2. **Качество кода (30%)**:
+   - Идемпотентность всех операций
+   - Правильное использование переменных
+   - Читаемость и документированность
+   - Соблюдение best practices
+   - Прохождение ansible-lint
+
+3. **Безопасность (15%)**:
+   - Секреты в Vault
+   - Правильные права на файлы
+   - SSH hardening
+   - Firewall настроен
+
+4. **Тестирование (10%)**:
+   - Molecule тесты для ролей
+   - CI/CD pipeline работает
+   - Check mode не показывает ошибок
+
+5. **Документация (5%)**:
+   - README с инструкциями
+   - Комментарии в коде
+   - Примеры использования
+
+---
+
+## Заключение и дальнейшее развитие
+
+### 🎓 Что вы освоили:
+
+1. **Основы Ansible**: Архитектура, inventory, ad-hoc команды
+2. **Playbooks**: Написание автоматизаций, переменные, условия, циклы
+3. **Jinja2**: Шаблонизация конфигурационных файлов
+4. **Roles**: Модульная архитектура и переиспользование кода
+5. **Динамические данные**: Include/import, делегирование, groups
+6. **Облака и контейнеры**: Docker, Kubernetes, AWS/GCP
+7. **Тестирование**: Molecule, ansible-lint, CI/CD
+8. **Best Practices**: Оптимизация, безопасность, отладка
+
+### 📚 Дополнительные ресурсы для изучения:
+
+**Официальная документация:**
+- [Ansible Documentation](https://docs.ansible.com/)
+- [Ansible Galaxy](https://galaxy.ansible.com/)
+- [Ansible Best Practices](https://docs.ansible.com/ansible/latest/tips_tricks/ansible_tips_tricks.html)
+
+**Книги:**
+- "Ansible for DevOps" - Jeff Geerling
+- "Ansible: Up and Running" - Lorin Hochstein, René Moser
+- "Mastering Ansible" - James Freeman, Jesse Keating
+
+**Курсы и сертификации:**
+- Red Hat Certified Specialist in Ansible Automation
+- Ansible courses на Pluralsight/Udemy
+- Linux Academy Ansible courses
+
+**Сообщество:**
+- [Ansible Google Group](https://groups.google.com/g/ansible-project)
+- [Reddit r/ansible](https://www.reddit.com/r/ansible/)
+- [Ansible GitHub](https://github.com/ansible/ansible)
+
+### 🚀 Следующие шаги:
+
+**Уровень 1 - Продолжающий:**
+- Изучите Ansible Collections в деталях
+- Освойте написание кастомных модулей на Python
+- Погрузитесь в Ansible Tower/AWX для enterprise использования
+- Изучите интеграцию с системами мониторинга (Prometheus, ELK)
+
+**Уровень 2 - Продвинутый:**
+- Network automation с Ansible
+- Автоматизация безопасности (compliance as code)
+- Multi-cloud orchestration (AWS + GCP + Azure)
+- GitOps подход с Ansible
+- Создание собственных Ansible Collections
+
+**Уровень 3 - Эксперт:**
+- Вклад в open-source Ansible проекты
+- Разработка enterprise-решений
+- Создание обучающих материалов и докладов
+- Архитектура сложных automation платформ
+- Оптимизация производительности на масштабе
+
+### 💡 Практические советы для поддержания навыков:
+
+1. **Регулярная практика**: Автоматизируйте что-то новое каждый месяц
+2. **Читайте код других**: Изучайте роли на Ansible Galaxy
+3. **Пишите тесты**: Привыкайте к TDD подходу
+4. **Документируйте**: Ведите внутреннюю базу знаний
+5. **Следите за обновлениями**: Ansible активно развивается
+6. **Участвуйте в сообществе**: Отвечайте на вопросы, делитесь опытом
+7. **Автоматизируйте всё**: Home lab, pet projects, рабочие задачи
+
+### 📋 Чек-лист для периодической проверки знаний:
+
+- [ ] Могу быстро написать playbook с нуля
+- [ ] Понимаю разницу между include и import
+- [ ] Умею создавать и тестировать роли
+- [ ] Знаю как работать с Vault
+- [ ] Понимаю приоритеты переменных
+- [ ] Умею работать с dynamic inventory
+- [ ] Могу оптимизировать производительность playbook
+- [ ] Знаю как обрабатывать ошибки и делать rollback
+- [ ] Понимаю как работает делегирование
+- [ ] Умею интегрировать Ansible с CI/CD
+
+### 🎯 Финальное напутствие:
+
+Ansible - это мощный инструмент, но его сила не в самом инструменте, а в том, как вы его используете. Ключевые принципы успешной автоматизации:
+
+1. **Простота**: Сложное решение обычно неправильное
+2. **Идемпотентность**: Playbook должен работать повторно без побочных эффектов
+3. **Модульность**: Переиспользуйте код через роли
+4. **Тестируемость**: Если нельзя протестировать - нельзя доверять
+5. **Документация**: Код читают чаще, чем пишут
+6. **Безопасность**: Никогда не жертвуйте безопасностью ради удобства
+
+**Помните**: Автоматизация - это путешествие, а не пункт назначения. Каждый автоматизированный процесс можно улучшить, каждый playbook можно оптимизировать, каждую роль можно сделать более гибкой.
+
+Удачи в вашем путешествии с Ansible! 🚀
+
+---
+
+**P.S.** Не забудьте звездочку на GitHub проектам, которые используете, и поделиться своим опытом с сообществом!
+
+**Обратная связь**: Если у вас есть предложения по улучшению этого курса или вы нашли ошибки, пожалуйста, создайте Issue или Pull Request в репозитории.
+
+**Версия курса**: 2.0 (Обновлено для Ansible 2.15+)
+**Последнее обновление**: Январь 2025

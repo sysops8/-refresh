@@ -4850,4 +4850,4 @@ pyroscope.configure(
 6. Service Map помогает понять архитектуру системы
 7. Профилирование дополняет трейсинг для deep analysis
 8. Правильный sampling экономит деньги и storage
-
+````

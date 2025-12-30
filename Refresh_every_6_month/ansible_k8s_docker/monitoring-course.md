@@ -4829,7 +4829,6 @@ pyroscope.configure(
 ## Итоги модуля 6
 
 После прохождения этого модуля ты должен уметь:
-
 ✅ Понимать концепции distributed tracing (trace, span, context)
 ✅ Настраивать OpenTelemetry в приложениях
 ✅ Использовать Jaeger для анализа трейсов

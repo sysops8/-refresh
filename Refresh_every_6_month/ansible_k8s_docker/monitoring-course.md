@@ -5601,7 +5601,7 @@ def monitor_slo():
         print(f"Latency SLO: {latency_status}")
         
         time.sleep(60)  # Каждую минуту
-```
+````
 
 **4. Профилирование производительности**:
 
@@ -5646,4 +5646,4 @@ from memory_profiler import profile
 def memory_intensive_operation():
     large_list = [i for i in range(1000000)]
     return sum(large_list)
-```
+````

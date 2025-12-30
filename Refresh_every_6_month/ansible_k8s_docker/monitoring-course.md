@@ -3216,7 +3216,7 @@ Span:
   logs:
     - timestamp: "2025-01-15T10:00:00.050Z"
       message: "Order validated"
-```
+````
 
 **Популярные системы трейсинга:**
 ```

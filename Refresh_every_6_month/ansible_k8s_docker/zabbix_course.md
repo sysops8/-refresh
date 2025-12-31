@@ -2358,7 +2358,7 @@ Proxy 2: proxy-office-1 (standby)
    
    # Логи proxy
    docker exec zabbix-proxy-test tail -f /var/log/zabbix/zabbix_proxy.log
-   ```
+```
 
 5. **Настрой мониторинг самого Proxy**
    ```

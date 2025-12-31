@@ -2817,6 +2817,7 @@ Item configuration:
 ```
 
    ### В веб-интерфейсе
+```
    Administration → Scripts → Create script
    
    Name: Check and restart service
@@ -2827,7 +2828,8 @@ Item configuration:
    
    Host group: Linux servers
    User group: Administrators
-   Enable confirmation: Yes   
+   Enable confirmation: Yes
+```
 
 3. **Используй Zabbix API для автоматизации**
    ```python

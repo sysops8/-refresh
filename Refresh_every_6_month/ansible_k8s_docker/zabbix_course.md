@@ -2816,7 +2816,7 @@ Item configuration:
    chown zabbix:zabbix /usr/lib/zabbix/externalscripts/check_and_restart.sh
 ```
 
-   # В веб-интерфейсе
+   ### В веб-интерфейсе
    Administration → Scripts → Create script
    
    Name: Check and restart service

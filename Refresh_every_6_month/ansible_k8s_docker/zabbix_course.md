@@ -2061,3 +2061,2563 @@ Rules: Create new / Update existing
 ```
 
 ---
+## Модуль 7: Zabbix Proxy и распределенный мониторинг (25 минут)
+
+### 🎯 Напоминалка
+
+**Zabbix Proxy - зачем нужен:**
+```
+Сценарии использования:
+- Мониторинг удаленных локаций
+- Снижение нагрузки на Zabbix Server
+- Мониторинг за NAT/firewall
+- Географически распределенная инфраструктура
+- Офлайн мониторинг (с последующей синхронизацией)
+```
+
+**Архитектура с Proxy:**
+```
+Zabbix Server (HQ)
+├── Database
+└── Web Interface
+
+↓ (через интернет/VPN)
+
+Zabbix Proxy (Remote Office 1)
+├── Local Database (SQLite/MySQL/PostgreSQL)
+└── Cache для офлайн работы
+    ├── Zabbix Agent (Server 1)
+    ├── Zabbix Agent (Server 2)
+    └── SNMP devices
+
+Zabbix Proxy (Remote Office 2)
+└── (аналогично)
+```
+
+**Режимы работы Proxy:**
+```yaml
+Active mode:
+  - Proxy инициирует соединение с Server
+  - Proxy запрашивает конфигурацию
+  - Proxy отправляет собранные данные
+  - Подходит для Proxy за NAT
+  - Порт 10051 на Server должен быть открыт
+
+Passive mode:
+  - Server инициирует соединение с Proxy
+  - Server отправляет конфигурацию
+  - Server запрашивает данные
+  - Proxy должен быть доступен для Server
+  - Порт 10051 на Proxy должен быть открыт
+```
+
+**Proxy configuration файл:**
+```bash
+# /etc/zabbix/zabbix_proxy.conf
+
+# Основные параметры
+ProxyMode=0              # 0=active, 1=passive
+Server=zabbix-server-ip  # IP Zabbix Server
+Hostname=proxy-office-1  # Уникальное имя Proxy
+
+# Database
+DBHost=localhost
+DBName=zabbix_proxy
+DBUser=zabbix
+DBPassword=password
+
+# Network
+ListenPort=10051
+StartPollers=10          # Количество pollers
+StartTrappers=5
+
+# Cache (для офлайн работы)
+ConfigFrequency=3600     # Частота получения конфиг (сек)
+DataSenderFrequency=1    # Частота отправки данных (сек)
+ProxyLocalBuffer=0       # Хранить данные локально (часы)
+ProxyOfflineBuffer=24    # Буфер при недоступности Server (часы)
+
+# Логи
+LogFile=/var/log/zabbix/zabbix_proxy.log
+LogFileSize=10
+DebugLevel=3
+```
+
+**Установка Zabbix Proxy:**
+```bash
+# Ubuntu/Debian
+apt install zabbix-proxy-sqlite3  # или mysql/postgresql
+
+# Конфигурация
+vi /etc/zabbix/zabbix_proxy.conf
+# Настроить Server, Hostname, DBName
+
+# Создать БД (SQLite)
+# Автоматически при запуске
+
+# Для MySQL
+mysql -uroot -p
+CREATE DATABASE zabbix_proxy CHARACTER SET utf8mb4 COLLATE utf8mb4_bin;
+CREATE USER 'zabbix'@'localhost' IDENTIFIED BY 'password';
+GRANT ALL PRIVILEGES ON zabbix_proxy.* TO 'zabbix'@'localhost';
+FLUSH PRIVILEGES;
+
+# Импорт схемы
+zcat /usr/share/zabbix-sql-scripts/mysql/proxy.sql.gz | mysql -uzabbix -p zabbix_proxy
+
+# Запуск
+systemctl enable zabbix-proxy
+systemctl start zabbix-proxy
+systemctl status zabbix-proxy
+
+# Проверка логов
+tail -f /var/log/zabbix/zabbix_proxy.log
+```
+
+**Docker Compose для Proxy:**
+```yaml
+version: '3.8'
+services:
+  zabbix-proxy:
+    image: zabbix/zabbix-proxy-sqlite3:alpine-6.4-latest
+    container_name: zabbix-proxy-office1
+    environment:
+      ZBX_PROXYMODE: 0  # 0=active, 1=passive
+      ZBX_SERVER_HOST: zabbix-server.example.com
+      ZBX_HOSTNAME: proxy-office-1
+      ZBX_CONFIGFREQUENCY: 3600
+      ZBX_DATASENDERFREQUENCY: 1
+      ZBX_PROXYOFFLINEBUFFER: 24
+      ZBX_ENABLEREMOTECOMMANDS: 1
+      ZBX_STARTPOLLERS: 10
+    ports:
+      - "10051:10051"
+    volumes:
+      - zabbix-proxy-data:/var/lib/zabbix
+    restart: unless-stopped
+    networks:
+      - proxy-net
+
+  zabbix-agent:
+    image: zabbix/zabbix-agent2:alpine-6.4-latest
+    environment:
+      ZBX_HOSTNAME: "Server in Office 1"
+      ZBX_SERVER_HOST: zabbix-proxy-office1
+      ZBX_SERVER_PORT: 10051
+    privileged: true
+    pid: "host"
+    networks:
+      - proxy-net
+
+volumes:
+  zabbix-proxy-data:
+
+networks:
+  proxy-net:
+    driver: bridge
+```
+
+**Регистрация Proxy на Server:**
+```
+Administration → Proxies → Create proxy
+
+Name: proxy-office-1
+Proxy mode: Active
+Proxy address: (для passive mode)
+
+Advanced configuration:
+  Heartbeat frequency: 60s
+  Configuration sync frequency: 3600s
+```
+
+**Назначение хостов на Proxy:**
+```
+Configuration → Hosts → Create host / Edit host
+
+Host name: server-remote-1
+Groups: Remote servers
+Monitored by proxy: proxy-office-1
+Interfaces: 10.10.10.10 (IP в удаленной сети)
+```
+
+**Мониторинг Proxy:**
+```bash
+# Встроенный мониторинг
+Configuration → Hosts → Find: proxy-office-1
+Template: Template App Zabbix Proxy
+
+Items:
+- zabbix[proxy,<name>,lastaccess]     # Последний контакт
+- zabbix[proxy,<name>,delay]          # Задержка синхронизации
+- zabbix[proxy,<name>,preprocessing_queue]  # Очередь обработки
+- zabbix[proxy,<name>,history_queue]  # Очередь истории
+
+# Проверка из CLI
+zabbix_server -R config_cache_reload
+tail -f /var/log/zabbix/zabbix_server.log | grep proxy
+```
+
+**High Availability для Proxy (Zabbix 7.0+):**
+```yaml
+# Несколько Proxy с одинаковым именем
+Proxy 1: proxy-office-1 (active)
+Proxy 2: proxy-office-1 (standby)
+
+# Server автоматически переключается при недоступности
+# Используется для критичных локаций
+```
+
+### 💻 Задание
+
+Настрой распределенный мониторинг с Proxy:
+
+1. **Разверни Zabbix Proxy через Docker**
+   ```bash
+   # Создай docker-compose.yml
+   cat > docker-compose-proxy.yml <<'EOF'
+   version: '3.8'
+   services:
+     zabbix-proxy:
+       image: zabbix/zabbix-proxy-sqlite3:alpine-6.4-latest
+       container_name: zabbix-proxy-test
+       environment:
+         ZBX_PROXYMODE: 0
+         ZBX_SERVER_HOST: <YOUR_ZABBIX_SERVER_IP>
+         ZBX_HOSTNAME: proxy-test
+         ZBX_CONFIGFREQUENCY: 300
+         ZBX_DATASENDERFREQUENCY: 1
+       ports:
+         - "10061:10051"
+       volumes:
+         - proxy-data:/var/lib/zabbix
+       restart: unless-stopped
+
+     test-agent:
+       image: zabbix/zabbix-agent2:alpine-6.4-latest
+       environment:
+         ZBX_HOSTNAME: "Test server via proxy"
+         ZBX_SERVER_HOST: zabbix-proxy-test
+       privileged: true
+       pid: "host"
+
+   volumes:
+     proxy-data:
+   EOF
+
+   # Запуск
+   docker-compose -f docker-compose-proxy.yml up -d
+
+   # Проверка
+   docker-compose -f docker-compose-proxy.yml logs -f zabbix-proxy
+   ```
+
+2. **Зарегистрируй Proxy на Server**
+   ```
+   Administration → Proxies → Create proxy
+   
+   Name: proxy-test
+   Proxy mode: Active
+   
+   Encryption:
+     Connections to proxy: No encryption
+     Connections from proxy: No encryption
+   
+   Advanced configuration:
+     Heartbeat frequency: 60
+   
+   # После создания подожди 1-2 минуты
+   # Должен появиться зеленый индикатор
+   ```
+
+3. **Создай Host, мониторимый через Proxy**
+   ```
+   Configuration → Hosts → Create host
+   
+   Host name: TestServerViaProxy
+   Groups: Linux servers
+   Interfaces:
+     Agent: DNS: test-agent / IP: 172.x.x.x
+     Port: 10050
+   
+   Monitored by proxy: proxy-test
+   
+   Templates:
+     - Linux by Zabbix agent
+   ```
+
+4. **Проверь работу Proxy**
+   ```
+   # В веб-интерфейсе
+   Administration → Proxies
+   # Проверь Last seen и Version
+   
+   # Проверь сбор данных
+   Monitoring → Latest data
+   Host: TestServerViaProxy
+   # Должны поступать метрики
+   
+   # Логи proxy
+   docker exec zabbix-proxy-test tail -f /var/log/zabbix/zabbix_proxy.log
+   ```
+
+5. **Настрой мониторинг самого Proxy**
+   ```
+   Configuration → Hosts → proxy-test
+   Templates → Add
+     - Template App Zabbix Proxy
+   
+   # Проверь items
+   Monitoring → Latest data
+   Host: proxy-test
+   Items:
+     - Proxy delay
+     - Proxy queue
+     - Last access time
+   ```
+
+6. **Симулируй отказ связи**
+   ```bash
+   # Останови proxy
+   docker-compose -f docker-compose-proxy.yml stop zabbix-proxy
+   
+   # На Server проверь
+   Administration → Proxies
+   # Last seen должен устаревать
+   
+   # Triggers должны сработать
+   Monitoring → Problems
+   # Proxy proxy-test is unreachable
+   
+   # Восстанови
+   docker-compose -f docker-compose-proxy.yml start zabbix-proxy
+   
+   # Проверь синхронизацию данных
+   # Данные за время недоступности должны подгрузиться
+   ```
+
+### 🚀 Бонус (новое)
+
+**Настрой Proxy с encryption:**
+
+```bash
+# На Proxy сгенерируй PSK
+openssl rand -hex 32 > /etc/zabbix/proxy.psk
+
+# Запиши PSK identity
+echo "proxy-test-psk" > /etc/zabbix/proxy_psk_identity.txt
+
+# Конфигурация Proxy
+TLSConnect=psk
+TLSAccept=psk
+TLSPSKIdentity=proxy-test-psk
+TLSPSKFile=/etc/zabbix/proxy.psk
+
+# На Server
+Administration → Proxies → proxy-test → Encryption
+
+Connections to proxy:
+  Encryption: PSK
+  PSK identity: proxy-test-psk
+  PSK: <содержимое proxy.psk>
+
+Connections from proxy:
+  Encryption: PSK
+  PSK identity: proxy-test-psk
+  PSK: <содержимое proxy.psk>
+```
+
+**Многоуровневая архитектура (Proxy → Proxy):**
+
+```yaml
+# НЕ ПОДДЕРЖИВАЕТСЯ напрямую в Zabbix
+# Но можно реализовать через SSH tunnels
+
+Zabbix Server (HQ)
+↓
+Zabbix Proxy (Regional DC)
+↓ (SSH tunnel)
+Zabbix Proxy (Branch Office)
+↓
+Agents
+
+# На Regional DC:
+ssh -L 10051:localhost:10051 branch-office-proxy -N -f
+
+# Branch Office Proxy конфигурация:
+Server=127.0.0.1  # Через SSH tunnel
+```
+
+**Автоматическая регистрация хостов через Proxy:**
+
+```yaml
+Configuration → Actions → Autoregistration actions → Create action
+
+Name: Auto-register hosts via proxy-test
+
+Conditions:
+  - Proxy equals: proxy-test
+  - Host metadata contains: Linux
+
+Operations:
+  - Add host
+  - Add to host groups: Auto-registered Linux
+  - Link to templates: Linux by Zabbix agent
+  - Set monitored by proxy: proxy-test
+
+# На агенте
+HostMetadata=Linux auto-registered
+ServerActive=proxy-test-ip:10051
+```
+
+**Load balancing между несколькими Proxy:**
+
+```python
+#!/usr/bin/env python3
+# Скрипт для распределения хостов по Proxy
+
+import requests
+import json
+
+ZABBIX_URL = "http://localhost:8080/api_jsonrpc.php"
+AUTH_TOKEN = "<your_token>"
+
+proxies = ["proxy-office-1", "proxy-office-2", "proxy-office-3"]
+
+def get_proxy_load(proxy_name):
+    """Получить нагрузку на proxy"""
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "proxy.get",
+        "params": {
+            "output": ["host", "lastaccess"],
+            "selectHosts": "count",
+            "filter": {"host": proxy_name}
+        },
+        "auth": AUTH_TOKEN,
+        "id": 1
+    }
+    response = requests.post(ZABBIX_URL, json=payload)
+    result = response.json()['result'][0]
+    return int(result['hosts'])
+
+def assign_host_to_proxy(host_id, proxy_id):
+    """Назначить хост на proxy"""
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "host.update",
+        "params": {
+            "hostid": host_id,
+            "proxy_hostid": proxy_id
+        },
+        "auth": AUTH_TOKEN,
+        "id": 2
+    }
+    requests.post(ZABBIX_URL, json=payload)
+
+# Получить proxy с минимальной нагрузкой
+loads = {p: get_proxy_load(p) for p in proxies}
+min_loaded_proxy = min(loads, key=loads.get)
+print(f"Least loaded proxy: {min_loaded_proxy} ({loads[min_loaded_proxy]} hosts)")
+```
+
+---
+
+## Модуль 8: Интеграции и расширения (30 минут)
+
+### 🎯 Напоминалка
+
+**Типы интеграций:**
+```
+Webhooks              # Исходящие HTTP запросы
+External scripts      # Выполнение скриптов на Server
+Global scripts        # Скрипты через веб-интерфейс
+API                   # REST API для автоматизации
+Database direct       # Прямой доступ к БД
+Zabbix sender         # Отправка метрик извне
+```
+
+**Популярные интеграции:**
+```
+ITSM:
+- Jira
+- ServiceNow
+- BMC Remedy
+
+Chat/Collaboration:
+- Slack
+- Microsoft Teams
+- Telegram
+- Discord
+- Mattermost
+
+Incident Management:
+- PagerDuty
+- OpsGenie
+- VictorOps
+
+Monitoring/Observability:
+- Grafana
+- Prometheus
+- ELK Stack
+- Datadog
+
+Automation:
+- Ansible
+- SaltStack
+- Puppet
+- Jenkins
+```
+
+**Zabbix API основы:**
+```bash
+# Endpoint
+http://zabbix-server/api_jsonrpc.php
+
+# Структура запроса
+{
+  "jsonrpc": "2.0",
+  "method": "method.name",
+  "params": {...},
+  "auth": "token",
+  "id": 1
+}
+
+# Авторизация
+curl -X POST http://zabbix/api_jsonrpc.php \
+  -H "Content-Type: application/json-rpc" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "user.login",
+    "params": {
+      "username": "Admin",
+      "password": "zabbix"
+    },
+    "id": 1
+  }'
+
+# Response: {"result": "auth_token"}
+```
+
+**Основные API методы:**
+```python
+# Hosts
+host.get              # Получить хосты
+host.create           # Создать хост
+host.update           # Обновить хост
+host.delete           # Удалить хост
+
+# Items
+item.get              # Получить items
+item.create           # Создать item
+item.update           # Обновить item
+
+# Triggers
+trigger.get           # Получить триггеры
+trigger.create        # Создать триггер
+
+# Problems
+problem.get           # Получить проблемы
+event.acknowledge     # Подтвердить событие
+
+# History
+history.get           # Получить историю
+trend.get             # Получить тренды
+
+# Templates
+template.get          # Получить templates
+template.create       # Создать template
+configuration.import  # Импорт конфигурации
+configuration.export  # Экспорт конфигурации
+```
+
+**Global scripts:**
+```bash
+# Administration → Scripts → Create script
+
+Name: Restart service
+Type: Script
+Execute on: Zabbix server
+Commands:
+  ssh -o StrictHostKeyChecking=no {HOST.CONN} "sudo systemctl restart nginx"
+
+Host group: All
+User group: Administrators
+Enable confirmation: Yes
+Confirmation text: Restart nginx on {HOST.NAME}?
+
+# Использование
+Monitoring → Hosts → Select host → Execute script
+```
+
+**External scripts:**
+```bash
+# Расположение: /usr/lib/zabbix/externalscripts/
+
+# Пример: restart_service.sh
+#!/bin/bash
+HOST=$1
+SERVICE=$2
+
+ssh -o StrictHostKeyChecking=no zabbix@$HOST "sudo systemctl restart $SERVICE"
+if [ $? -eq 0 ]; then
+  echo "Service $SERVICE restarted successfully on $HOST"
+  exit 0
+else
+  echo "Failed to restart $SERVICE on $HOST"
+  exit 1
+fi
+
+# Сделать исполняемым
+chmod +x /usr/lib/zabbix/externalscripts/restart_service.sh
+chown zabbix:zabbix /usr/lib/zabbix/externalscripts/restart_service.sh
+
+# В Actions
+Operations → Run script
+Script name: restart_service.sh {HOST.CONN} nginx
+```
+
+**Zabbix Sender:**
+```bash
+# Отправка метрик извне
+zabbix_sender -z zabbix-server -s "hostname" -k "custom.metric" -o 42
+
+# Массовая отправка из файла
+cat metrics.txt
+hostname custom.metric1 100
+hostname custom.metric2 200
+
+zabbix_sender -z zabbix-server -i metrics.txt
+
+# В скрипте
+#!/bin/bash
+VALUE=$(command_to_get_value)
+zabbix_sender -z zabbix-server -s "$(hostname)" -k "custom.metric" -o "$VALUE"
+
+# Trapper item в Zabbix
+Type: Zabbix trapper
+Key: custom.metric
+```
+
+**Prometheus integration:**
+```yaml
+# Zabbix может собирать метрики из Prometheus
+
+Item configuration:
+  Type: HTTP agent
+  URL: http://prometheus:9090/api/v1/query?query=up
+  Request type: GET
+  
+  Preprocessing:
+    - JSONPath: $.data.result[0].value[1]
+    - JavaScript: 
+        return value === "1" ? 1 : 0;
+
+# Или использовать Prometheus remote write в Zabbix
+```
+
+### 💻 Задание
+
+Настрой интеграции с внешними системами:
+
+1. **Создай Jira интеграцию через Webhook**
+   
+   Administration → Media types → Create media type
+   ```javascript
+   Name: Jira
+   Type: Webhook
+   
+   Parameters:
+   - jira_url: https://your-domain.atlassian.net
+   - username: your-email@example.com
+   - api_token: <JIRA_API_TOKEN>
+   - project_key: INCIDENT
+   - issue_type: Bug
+   - priority: {ALERT.SEVERITY}
+   - summary: {ALERT.SUBJECT}
+   - description: {ALERT.MESSAGE}
+   
+   Script:
+   try {
+     var params = JSON.parse(value);
+     var req = new HttpRequest();
+     
+     var auth = btoa(params.username + ':' + params.api_token);
+     req.addHeader('Content-Type: application/json');
+     req.addHeader('Authorization: Basic ' + auth);
+     
+     var url = params.jira_url + '/rest/api/2/issue';
+     
+     var priority_map = {
+       'Disaster': '1',  // Highest
+       'High': '2',
+       'Average': '3',
+       'Warning': '4',
+       'Information': '5' // Lowest
+     };
+     
+     var payload = {
+       fields: {
+         project: { key: params.project_key },
+         summary: params.summary,
+         description: params.description,
+         issuetype: { name: params.issue_type },
+         priority: { id: priority_map[params.priority] || '3' }
+       }
+     };
+     
+     var response = req.post(url, JSON.stringify(payload));
+     
+     if (req.getStatus() != 201) {
+       throw 'JIRA API error: ' + req.getStatus();
+     }
+     
+     var result = JSON.parse(response);
+     return 'Created issue: ' + result.key;
+   } catch (error) {
+     throw 'JIRA integration failed: ' + error;
+   }
+   ```
+
+2. **Настрой Global Script для автоматизации**
+```bash
+   # На Zabbix Server создай скрипт
+   cat > /usr/lib/zabbix/externalscripts/check_and_restart.sh <<'EOF'
+   #!/bin/bash
+   HOST=$1
+   SERVICE=$2
+   
+   # Проверка статуса
+   STATUS=$(ssh -o StrictHostKeyChecking=no zabbix@$HOST "systemctl is-active $SERVICE")
+   
+   if [ "$STATUS" != "active" ]; then
+     # Рестарт
+     ssh zabbix@$HOST "sudo systemctl restart $SERVICE"
+     sleep 5
+     
+     # Проверка после рестарта
+     NEW_STATUS=$(ssh zabbix@$HOST "systemctl is-active $SERVICE")
+     
+     if [ "$NEW_STATUS" = "active" ]; then
+       echo "Service $SERVICE successfully restarted on $HOST"
+       exit 0
+     else
+       echo "Failed to restart $SERVICE on $HOST"
+       exit 1
+     fi
+   else
+     echo "Service $SERVICE is already running on $HOST"
+     exit 0
+   fi
+   EOF
+```
+
+```bash
+   chmod +x /usr/lib/zabbix/externalscripts/check_and_restart.sh
+   chown zabbix:zabbix /usr/lib/zabbix/externalscripts/check_and_restart.sh
+```
+
+   # В веб-интерфейсе
+   Administration → Scripts → Create script
+   
+   Name: Check and restart service
+   Type: Script
+   Execute on: Zabbix server
+   Commands: /usr/lib/zabbix/externalscripts/check_and_restart.sh {HOST.CONN} {$SERVICE.NAME}
+   Description: Check service status and restart if needed
+   
+   Host group: Linux servers
+   User group: Administrators
+   Enable confirmation: Yes   
+
+3. **Используй Zabbix API для автоматизации**
+   ```python
+   #!/usr/bin/env python3
+   # auto_acknowledge.py - Автоматическое подтверждение проблем
+   
+   import requests
+   import json
+   from datetime import datetime
+   
+   ZABBIX_URL = "http://localhost:8080/api_jsonrpc.php"
+   USERNAME = "Admin"
+   PASSWORD = "zabbix"
+   
+   def api_request(method, params, auth=None):
+       payload = {
+           "jsonrpc": "2.0",
+           "method": method,
+           "params": params,
+           "id": 1
+       }
+       if auth:
+           payload["auth"] = auth
+       
+       response = requests.post(ZABBIX_URL, json=payload)
+       result = response.json()
+       
+       if 'error' in result:
+           raise Exception(result['error'])
+       
+       return result.get('result')
+   
+   # Логин
+   auth = api_request("user.login", {
+       "username": USERNAME,
+       "password": PASSWORD
+   })
+   
+   print(f"Authenticated: {auth[:10]}...")
+   
+   # Получить неподтвержденные проблемы Warning и ниже
+   problems = api_request("problem.get", {
+       "output": ["eventid", "name", "severity"],
+       "severities": [1, 2, 3],  # Information, Warning, Average
+       "acknowledged": 0,
+       "recent": 1,
+       "sortfield": ["eventid"],
+       "sortorder": "DESC"
+   }, auth)
+   
+   print(f"Found {len(problems)} unacknowledged problems")
+   
+   # Автоматическое подтверждение
+   for problem in problems:
+       eventid = problem['eventid']
+       name = problem['name']
+       
+       api_request("event.acknowledge", {
+           "eventids": eventid,
+           "action": 6,  # 6 = Add message + Close problem
+           "message": f"Auto-acknowledged by script at {datetime.now()}"
+       }, auth)
+       
+       print(f"Acknowledged: {name}")
+   
+   print("Done!")
+   ```
+
+4. **Настрой интеграцию с Grafana**
+   ```bash
+   # В Grafana установи Zabbix datasource
+   # Plugins → Add plugin → Zabbix
+   
+   # Configuration → Data sources → Add data source → Zabbix
+   
+   URL: http://zabbix-server/api_jsonrpc.php
+   Username: Admin
+   Password: zabbix
+   
+   # Создай dashboard в Grafana
+   # Add panel → Select Zabbix datasource
+   # Query: 
+   #   Group: Linux servers
+   #   Host: *
+   #   Application: CPU
+   #   Item: system.cpu.util
+   ```
+
+5. **Создай custom trapper для внешних метрик**
+
+   ##### В Zabbix создай item
+   Configuration → Hosts → TestServer → Items → Create item
+   
+   Name: Custom application metric
+   Type: Zabbix trapper
+   Key: custom.app.metric
+   Type of information: Numeric (float)
+   
+```bash
+   # Скрипт для отправки метрик
+   cat > /usr/local/bin/send_metrics.sh <<'EOF'
+   #!/bin/bash
+   
+   # Получить метрику из приложения
+   METRIC_VALUE=$(curl -s http://localhost:8080/metrics | jq '.response_time')
+   
+   # Отправить в Zabbix
+   zabbix_sender \
+     -z zabbix-server \
+     -s "TestServer" \
+     -k "custom.app.metric" \
+     -o "$METRIC_VALUE"
+   EOF
+```
+ ```bash
+   chmod +x /usr/local/bin/send_metrics.sh
+```
+```
+   # Cron для регулярной отправки
+   */5 * * * * /usr/local/bin/send_metrics.sh
+```
+
+6. **Тест webhook в Slack для нестандартного форматирования**
+   ```javascript
+   // Administration → Media types → Create media type
+   
+   Name: Slack Enhanced
+   Type: Webhook
+   
+   Script:
+   try {
+     var params = JSON.parse(value);
+     var req = new HttpRequest();
+     req.addHeader('Content-Type: application/json');
+     
+     var webhook_url = '<YOUR_SLACK_WEBHOOK>';
+     
+     // Иконки по severity
+     var severity_icons = {
+       'Disaster': ':fire:',
+       'High': ':red_circle:',
+       'Average': ':large_orange_diamond:',
+       'Warning': ':warning:',
+       'Information': ':information_source:'
+     };
+     
+     // Цвета
+     var severity_colors = {
+       'Disaster': 'danger',
+       'High': 'danger',
+       'Average': 'warning',
+       'Warning': 'warning',
+       'Information': 'good'
+     };
+     
+     var severity = params.event_severity || 'Information';
+     var icon = severity_icons[severity] || ':question:';
+     var color = severity_colors[severity] || '#808080';
+     
+     var payload = {
+       channel: '#alerts',
+       username: 'Zabbix Monitoring',
+       icon_emoji: ':chart_with_upwards_trend:',
+       attachments: [{
+         color: color,
+         title: icon + ' ' + params.alert_subject,
+         text: params.alert_message,
+         fields: [
+           {
+             title: 'Host',
+             value: params.host_name,
+             short: true
+           },
+           {
+             title: 'Severity',
+             value: severity,
+             short: true
+           },
+           {
+             title: 'Time',
+             value: params.event_date + ' ' + params.event_time,
+             short: true
+           },
+           {
+             title: 'Event ID',
+             value: params.event_id,
+             short: true
+           }
+         ],
+         footer: 'Zabbix Monitoring System',
+         footer_icon: 'https://www.zabbix.com/favicon.ico',
+         ts: Math.floor(Date.now() / 1000)
+       }]
+     };
+     
+     if (params.trigger_url) {
+       payload.attachments[0].actions = [{
+         type: 'button',
+         text: 'View in Zabbix',
+         url: params.trigger_url
+       }];
+     }
+     
+     var response = req.post(webhook_url, JSON.stringify(payload));
+     
+     if (req.getStatus() != 200) {
+       throw 'Slack webhook failed: ' + req.getStatus();
+     }
+     
+     return 'OK';
+```
+
+---
+
+## Модуль 9: Автоматизация и API (30 минут)
+
+### 🎯 Напоминалка
+
+**Zabbix API** - RESTful JSON-RPC 2.0 API для автоматизации:
+
+**Базовая структура запроса:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "method.name",
+  "params": {
+    "param1": "value1"
+  },
+  "auth": "authentication_token",
+  "id": 1
+}
+```
+
+**Authentication:**
+```bash
+# Получение токена
+curl -X POST http://zabbix/api_jsonrpc.php \
+  -H "Content-Type: application/json-rpc" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "user.login",
+    "params": {
+      "username": "Admin",
+      "password": "zabbix"
+    },
+    "id": 1
+  }'
+
+# Ответ:
+# {"jsonrpc":"2.0","result":"auth_token_here","id":1}
+```
+
+**Основные методы API:**
+```yaml
+Hosts:
+  - host.get: Получить хосты
+  - host.create: Создать хост
+  - host.update: Обновить хост
+  - host.delete: Удалить хост
+
+Items:
+  - item.get: Получить items
+  - item.create: Создать item
+  - history.get: Получить историю
+
+Triggers:
+  - trigger.get: Получить триггеры
+  - problem.get: Получить проблемы
+
+Templates:
+  - template.get: Получить шаблоны
+  - configuration.import: Импорт конфигурации
+  - configuration.export: Экспорт конфигурации
+
+Users & Groups:
+  - user.get: Получить пользователей
+  - usergroup.get: Получить группы
+
+Maintenance:
+  - maintenance.create: Создать maintenance
+  - maintenance.delete: Удалить maintenance
+```
+
+**Примеры запросов:**
+
+**1. Получить все хосты:**
+```bash
+curl -X POST http://zabbix/api_jsonrpc.php \
+  -H "Content-Type: application/json-rpc" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "host.get",
+    "params": {
+      "output": ["hostid", "host", "status"],
+      "selectInterfaces": ["ip"],
+      "selectGroups": ["name"]
+    },
+    "auth": "AUTH_TOKEN",
+    "id": 1
+  }'
+```
+
+**2. Создать хост:**
+```bash
+curl -X POST http://zabbix/api_jsonrpc.php \
+  -H "Content-Type: application/json-rpc" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "host.create",
+    "params": {
+      "host": "NewServer",
+      "interfaces": [{
+        "type": 1,
+        "main": 1,
+        "useip": 1,
+        "ip": "192.168.1.100",
+        "dns": "",
+        "port": "10050"
+      }],
+      "groups": [{"groupid": "2"}],
+      "templates": [{"templateid": "10001"}]
+    },
+    "auth": "AUTH_TOKEN",
+    "id": 1
+  }'
+```
+
+**3. Получить проблемы:**
+```bash
+curl -X POST http://zabbix/api_jsonrpc.php \
+  -H "Content-Type: application/json-rpc" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "problem.get",
+    "params": {
+      "output": "extend",
+      "selectAcknowledges": "extend",
+      "recent": true,
+      "sortfield": ["eventid"],
+      "sortorder": "DESC"
+    },
+    "auth": "AUTH_TOKEN",
+    "id": 1
+  }'
+```
+
+**4. Создать maintenance:**
+```bash
+curl -X POST http://zabbix/api_jsonrpc.php \
+  -H "Content-Type: application/json-rpc" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "maintenance.create",
+    "params": {
+      "name": "Weekend maintenance",
+      "active_since": 1704067200,
+      "active_till": 1704153600,
+      "hostids": ["10084"],
+      "timeperiods": [{
+        "timeperiod_type": 0,
+        "start_date": 1704067200,
+        "period": 86400
+      }]
+    },
+    "auth": "AUTH_TOKEN",
+    "id": 1
+  }'
+```
+
+**Python wrapper - pyzabbix:**
+```python
+from pyzabbix import ZabbixAPI
+
+# Подключение
+zapi = ZabbixAPI('http://zabbix')
+zapi.login('Admin', 'zabbix')
+
+# Получить все хосты
+hosts = zapi.host.get(output=['hostid', 'host'])
+for host in hosts:
+    print(f"{host['hostid']}: {host['host']}")
+
+# Создать хост
+host = zapi.host.create(
+    host='NewServer',
+    interfaces=[{
+        'type': 1,
+        'main': 1,
+        'useip': 1,
+        'ip': '192.168.1.100',
+        'dns': '',
+        'port': '10050'
+    }],
+    groups=[{'groupid': '2'}],
+    templates=[{'templateid': '10001'}]
+)
+
+# Получить проблемы
+problems = zapi.problem.get(
+    output='extend',
+    recent=True,
+    sortfield='eventid',
+    sortorder='DESC'
+)
+
+# Создать maintenance
+maintenance = zapi.maintenance.create(
+    name='Server maintenance',
+    active_since=1704067200,
+    active_till=1704153600,
+    hostids=['10084'],
+    timeperiods=[{
+        'timeperiod_type': 0,
+        'start_date': 1704067200,
+        'period': 3600
+    }]
+)
+
+# Logout
+zapi.user.logout()
+```
+
+**Ansible Zabbix модули:**
+```yaml
+---
+- name: Manage Zabbix
+  hosts: localhost
+  tasks:
+    - name: Create host
+      community.zabbix.zabbix_host:
+        server_url: http://zabbix
+        login_user: Admin
+        login_password: zabbix
+        host_name: AnsibleHost
+        host_groups:
+          - Linux servers
+        link_templates:
+          - Template OS Linux
+        interfaces:
+          - type: agent
+            main: 1
+            useip: 1
+            ip: 192.168.1.100
+            port: 10050
+        status: enabled
+        state: present
+    
+    - name: Create maintenance
+      community.zabbix.zabbix_maintenance:
+        server_url: http://zabbix
+        login_user: Admin
+        login_password: zabbix
+        name: Maintenance window
+        host_names:
+          - AnsibleHost
+        state: present
+        minutes: 60
+    
+    - name: Get host info
+      community.zabbix.zabbix_host_info:
+        server_url: http://zabbix
+        login_user: Admin
+        login_password: zabbix
+        host_name: AnsibleHost
+      register: host_info
+    
+    - name: Display info
+      debug:
+        var: host_info
+```
+
+**Terraform Zabbix Provider:**
+```hcl
+terraform {
+  required_providers {
+    zabbix = {
+      source = "tpretz/zabbix"
+      version = "0.16.0"
+    }
+  }
+}
+
+provider "zabbix" {
+  username = "Admin"
+  password = "zabbix"
+  url      = "http://zabbix/api_jsonrpc.php"
+}
+
+# Создать host group
+resource "zabbix_host_group" "app_servers" {
+  name = "Application Servers"
+}
+
+# Создать host
+resource "zabbix_host" "app01" {
+  host   = "app01.example.com"
+  groups = [zabbix_host_group.app_servers.id]
+  
+  interface {
+    type = "agent"
+    main = true
+    ip   = "192.168.1.50"
+    port = 10050
+  }
+  
+  template_ids = [
+    "10001"  # Template OS Linux
+  ]
+}
+
+# Создать item
+resource "zabbix_item" "app01_custom" {
+  hostid      = zabbix_host.app01.id
+  key         = "custom.metric"
+  name        = "Custom Metric"
+  type        = "zabbix_agent"
+  value_type  = "unsigned"
+  delay       = "60s"
+}
+```
+
+### 💻 Задание
+
+Автоматизируй управление Zabbix через API:
+
+1. **Создай Python скрипт для массового добавления хостов**
+   
+   ```python
+   #!/usr/bin/env python3
+   from pyzabbix import ZabbixAPI
+   import csv
+   
+   # Подключение
+   zapi = ZabbixAPI('http://localhost:8080')
+   zapi.login('Admin', 'zabbix')
+   
+   # Читаем CSV со списком хостов
+   # Format: hostname,ip,group_name,template_name
+   with open('hosts.csv', 'r') as f:
+       reader = csv.DictReader(f)
+       for row in reader:
+           # Получаем group ID
+           groups = zapi.hostgroup.get(
+               filter={'name': row['group_name']}
+           )
+           if not groups:
+               # Создаем группу если не существует
+               group = zapi.hostgroup.create(name=row['group_name'])
+               group_id = group['groupids'][0]
+           else:
+               group_id = groups[0]['groupid']
+           
+           # Получаем template ID
+           templates = zapi.template.get(
+               filter={'host': row['template_name']}
+           )
+           template_id = templates[0]['templateid'] if templates else None
+           
+           # Создаем хост
+           try:
+               host = zapi.host.create(
+                   host=row['hostname'],
+                   interfaces=[{
+                       'type': 1,  # Agent
+                       'main': 1,
+                       'useip': 1,
+                       'ip': row['ip'],
+                       'dns': '',
+                       'port': '10050'
+                   }],
+                   groups=[{'groupid': group_id}],
+                   templates=[{'templateid': template_id}] if template_id else []
+               )
+               print(f"✓ Created host: {row['hostname']}")
+           except Exception as e:
+               print(f"✗ Failed to create {row['hostname']}: {e}")
+   
+   zapi.user.logout()
+   print("\nDone!")
+   ```
+   
+   Создай CSV файл `hosts.csv`:
+   ```csv
+   hostname,ip,group_name,template_name
+   web01,192.168.1.101,Web Servers,Template OS Linux
+   web02,192.168.1.102,Web Servers,Template OS Linux
+   db01,192.168.1.201,Database Servers,Template OS Linux
+   ```
+   
+   Установи pyzabbix и запусти:
+   ```bash
+   pip3 install pyzabbix
+   python3 bulk_add_hosts.py
+   ```
+
+2. **Создай скрипт для получения отчета о проблемах**
+   
+   ```python
+   #!/usr/bin/env python3
+   from pyzabbix import ZabbixAPI
+   from datetime import datetime
+   import json
+   
+   zapi = ZabbixAPI('http://localhost:8080')
+   zapi.login('Admin', 'zabbix')
+   
+   # Получаем активные проблемы
+   problems = zapi.problem.get(
+       output='extend',
+       selectAcknowledges='extend',
+       selectTags='extend',
+       selectSuppressionData='extend',
+       recent=True,
+       sortfield='eventid',
+       sortorder='DESC',
+       limit=100
+   )
+   
+   print("=" * 80)
+   print(f"ZABBIX PROBLEMS REPORT - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+   print("=" * 80)
+   print(f"\nTotal active problems: {len(problems)}\n")
+   
+   # Группируем по severity
+   by_severity = {}
+   for problem in problems:
+       severity = problem['severity']
+       if severity not in by_severity:
+           by_severity[severity] = []
+       by_severity[severity].append(problem)
+   
+   severity_names = {
+       '0': 'Not classified',
+       '1': 'Information',
+       '2': 'Warning',
+       '3': 'Average',
+       '4': 'High',
+       '5': 'Disaster'
+   }
+   
+   for severity in sorted(by_severity.keys(), reverse=True):
+       print(f"\n{severity_names[severity]} ({len(by_severity[severity])} problems):")
+       print("-" * 80)
+       for problem in by_severity[severity][:5]:  # Показываем топ-5
+           print(f"  • {problem['name']}")
+           print(f"    Time: {datetime.fromtimestamp(int(problem['clock']))}")
+           print(f"    Acknowledged: {'Yes' if problem['acknowledged'] == '1' else 'No'}")
+   
+   zapi.user.logout()
+   ```
+
+3. **Создай скрипт для создания maintenance window**
+   
+   ```python
+   #!/usr/bin/env python3
+   from pyzabbix import ZabbixAPI
+   from datetime import datetime, timedelta
+   import argparse
+   
+   parser = argparse.ArgumentParser(description='Create maintenance window')
+   parser.add_argument('--hosts', nargs='+', required=True, help='Host names')
+   parser.add_argument('--hours', type=int, default=2, help='Duration in hours')
+   parser.add_argument('--description', default='Maintenance', help='Description')
+   args = parser.parse_args()
+   
+   zapi = ZabbixAPI('http://localhost:8080')
+   zapi.login('Admin', 'zabbix')
+   
+   # Получаем host IDs
+   hosts = zapi.host.get(
+       filter={'host': args.hosts},
+       output=['hostid']
+   )
+   host_ids = [h['hostid'] for h in hosts]
+   
+   if not host_ids:
+       print("No hosts found!")
+       exit(1)
+   
+   # Создаем maintenance
+   now = int(datetime.now().timestamp())
+   duration = args.hours * 3600
+   
+   maintenance = zapi.maintenance.create(
+       name=f"{args.description} - {datetime.now().strftime('%Y-%m-%d %H:%M')}",
+       active_since=now,
+       active_till=now + duration,
+       hostids=host_ids,
+       timeperiods=[{
+           'timeperiod_type': 0,  # One time
+           'start_date': now,
+           'period': duration
+       }]
+   )
+   
+   print(f"✓ Maintenance created for {len(host_ids)} host(s)")
+   print(f"  Duration: {args.hours} hour(s)")
+   print(f"  Ends: {datetime.fromtimestamp(now + duration)}")
+   
+   zapi.user.logout()
+   ```
+   
+   Использование:
+   ```bash
+   python3 create_maintenance.py --hosts web01 web02 --hours 4 --description "Patching"
+   ```
+
+4. **Проверь работу скриптов**
+   ```bash
+   # Запусти все скрипты
+   python3 bulk_add_hosts.py
+   python3 problems_report.py
+   python3 create_maintenance.py --hosts web01 --hours 1
+   ```
+
+### 🚀 Бонус (новое)
+
+**Создай Ansible playbook для полной автоматизации:**
+
+```yaml
+---
+- name: Zabbix Complete Setup
+  hosts: localhost
+  vars:
+    zabbix_url: http://localhost:8080
+    zabbix_user: Admin
+    zabbix_password: zabbix
+  
+  tasks:
+    - name: Install pyzabbix
+      pip:
+        name: pyzabbix
+        state: present
+    
+    - name: Create host groups
+      community.zabbix.zabbix_hostgroup:
+        server_url: "{{ zabbix_url }}"
+        login_user: "{{ zabbix_user }}"
+        login_password: "{{ zabbix_password }}"
+        name: "{{ item }}"
+        state: present
+      loop:
+        - Web Servers
+        - Database Servers
+        - Application Servers
+    
+    - name: Create hosts from inventory
+      community.zabbix.zabbix_host:
+        server_url: "{{ zabbix_url }}"
+        login_user: "{{ zabbix_user }}"
+        login_password: "{{ zabbix_password }}"
+        host_name: "{{ item.name }}"
+        host_groups:
+          - "{{ item.group }}"
+        link_templates:
+          - Template OS Linux
+        interfaces:
+          - type: agent
+            main: 1
+            useip: 1
+            ip: "{{ item.ip }}"
+            port: 10050
+        status: enabled
+        state: present
+      loop:
+        - { name: 'web01', ip: '192.168.1.101', group: 'Web Servers' }
+        - { name: 'web02', ip: '192.168.1.102', group: 'Web Servers' }
+        - { name: 'db01', ip: '192.168.1.201', group: 'Database Servers' }
+    
+    - name: Create custom user macro
+      community.zabbix.zabbix_usermacro:
+        server_url: "{{ zabbix_url }}"
+        login_user: "{{ zabbix_user }}"
+        login_password: "{{ zabbix_password }}"
+        host_name: web01
+        macro_name: CUSTOM_THRESHOLD
+        macro_value: "80"
+    
+    - name: Create action for notifications
+      community.zabbix.zabbix_action:
+        server_url: "{{ zabbix_url }}"
+        login_user: "{{ zabbix_user }}"
+        login_password: "{{ zabbix_password }}"
+        name: "Notify on High severity"
+        event_source: trigger
+        status: enabled
+        conditions:
+          - type: trigger_severity
+            operator: ">="
+            value: High
+        operations:
+          - type: send_message
+            send_to_users:
+              - Admin
+            message:
+              subject: "Problem: {EVENT.NAME}"
+              body: |
+                Problem started: {EVENT.TIME} {EVENT.DATE}
+                Host: {HOST.NAME}
+                Severity: {EVENT.SEVERITY}
+```
+
+**CI/CD интеграция для экспорта/импорта конфигурации:**
+
+```bash
+#!/bin/bash
+# export_zabbix_config.sh
+
+API_URL="http://localhost:8080/api_jsonrpc.php"
+AUTH_TOKEN=$(curl -s -X POST $API_URL \
+  -H "Content-Type: application/json-rpc" \
+  -d '{"jsonrpc":"2.0","method":"user.login","params":{"username":"Admin","password":"zabbix"},"id":1}' \
+  | jq -r '.result')
+
+# Export templates
+curl -s -X POST $API_URL \
+  -H "Content-Type: application/json-rpc" \
+  -d "{
+    \"jsonrpc\": \"2.0\",
+    \"method\": \"configuration.export\",
+    \"params\": {
+      \"options\": {
+        \"templates\": [\"10001\", \"10047\"]
+      },
+      \"format\": \"yaml\"
+    },
+    \"auth\": \"$AUTH_TOKEN\",
+    \"id\": 1
+  }" | jq -r '.result' > templates_backup.yaml
+
+# Export hosts
+curl -s -X POST $API_URL \
+  -H "Content-Type: application/json-rpc" \
+  -d "{
+    \"jsonrpc\": \"2.0\",
+    \"method\": \"configuration.export\",
+    \"params\": {
+      \"options\": {
+        \"hosts\": [\"10084\"]
+      },
+      \"format\": \"yaml\"
+    },
+    \"auth\": \"$AUTH_TOKEN\",
+    \"id\": 1
+  }" | jq -r '.result' > hosts_backup.yaml
+
+echo "✓ Configuration exported"
+
+# Commit to Git
+git add templates_backup.yaml hosts_backup.yaml
+git commit -m "Zabbix config backup $(date +%Y-%m-%d)"
+git push
+```
+
+---
+
+## Модуль 10: Интеграции и расширенные возможности (30 минут)
+
+### 🎯 Напоминалка
+
+**Интеграция с внешними системами:**
+
+**1. Grafana интеграция:**
+```yaml
+Способы интеграции:
+  - Zabbix plugin для Grafana
+  - Прямое подключение к Zabbix DB
+  - API запросы из Grafana
+  
+Преимущества:
+  - Красивые dashboard'ы
+  - Объединение данных из разных источников
+  - Удобная визуализация
+```
+
+**Установка Zabbix plugin для Grafana:**
+```bash
+# Установка плагина
+grafana-cli plugins install alexanderzobnin-zabbix-app
+
+# Или через Docker
+docker run -d \
+  -p 3000:3000 \
+  -e "GF_INSTALL_PLUGINS=alexanderzobnin-zabbix-app" \
+  --name=grafana \
+  grafana/grafana
+
+# Конфигурация в Grafana UI:
+# Configuration → Data Sources → Add data source → Zabbix
+# URL: http://zabbix/api_jsonrpc.php
+# Username: Admin
+# Password: zabbix
+```
+
+**2. Prometheus экспорт метрик:**
+```bash
+# Zabbix может экспортировать метрики в Prometheus формате
+# Через отдельный экспортер
+
+# Docker
+docker run -d \
+  --name zabbix-exporter \
+  -p 9091:9091 \
+  -e ZBX_SERVER=zabbix-server \
+  -e ZBX_USERNAME=Admin \
+  -e ZBX_PASSWORD=zabbix \
+  zabbix/zabbix-web-service:alpine-6.4-latest
+
+# Prometheus config
+scrape_configs:
+  - job_name: 'zabbix'
+    static_configs:
+      - targets: ['localhost:9091']
+```
+
+**3. Slack/MS Teams/Telegram интеграция:**
+
+**Slack webhook:**
+```javascript
+// Media type: Webhook
+// Name: Slack
+
+// Script:
+try {
+    var params = JSON.parse(value);
+    var req = new HttpRequest();
+    req.addHeader('Content-Type: application/json');
+    
+    var webhook_url = '{ALERT.SENDTO}';
+    
+    var severity_colors = {
+        'Disaster': '#FF0000',
+        'High': '#FF8C00',
+        'Average': '#FFA500',
+        'Warning': '#FFD700',
+        'Information': '#00BFFF',
+        'Not classified': '#CCCCCC'
+    };
+    
+    var color = severity_colors[params.severity] || '#808080';
+    
+    var payload = {
+        attachments: [{
+            color: color,
+            title: params.subject,
+            text: params.message,
+            footer: 'Zabbix Monitoring',
+            ts: Math.floor(Date.now() / 1000)
+        }]
+    };
+    
+    req.post(webhook_url, JSON.stringify(payload));
+    return 'OK';
+} catch (error) {
+    throw 'Slack notification failed: ' + error;
+}
+
+// Parameters:
+// - subject: {ALERT.SUBJECT}
+// - message: {ALERT.MESSAGE}
+// - severity: {EVENT.SEVERITY}
+```
+
+**Telegram bot:**
+```javascript
+// Media type: Webhook
+// Name: Telegram
+
+try {
+    var params = JSON.parse(value);
+    var req = new HttpRequest();
+    
+    var bot_token = '<YOUR_BOT_TOKEN>';
+    var chat_id = '{ALERT.SENDTO}';
+    var url = 'https://api.telegram.org/bot' + bot_token + '/sendMessage';
+    
+    var severity_emoji = {
+        'Disaster': '🔴',
+        'High': '🟠',
+        'Average': '🟡',
+        'Warning': '🟢',
+        'Information': '🔵'
+    };
+    
+    var emoji = severity_emoji[params.severity] || '⚪';
+    
+    var message = emoji + ' *' + params.severity + '*\n\n' +
+                  '*Problem:* ' + params.subject + '\n' +
+                  params.message;
+    
+    var payload = {
+        chat_id: chat_id,
+        text: message,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true
+    };
+    
+    req.addHeader('Content-Type: application/json');
+    req.post(url, JSON.stringify(payload));
+    
+    return 'OK';
+} catch (error) {
+    throw 'Telegram notification failed: ' + error;
+}
+```
+
+**4. ITSM интеграция (JIRA, ServiceNow):**
+
+**JIRA webhook:**
+```javascript
+try {
+    var params = JSON.parse(value);
+    var req = new HttpRequest();
+    req.addHeader('Content-Type: application/json');
+    req.addHeader('Authorization: Basic ' + btoa('username:api_token'));
+    
+    var jira_url = 'https://your-domain.atlassian.net/rest/api/2/issue';
+    
+    var issue = {
+        fields: {
+            project: { key: 'OPS' },
+            summary: params.subject,
+            description: params.message,
+            issuetype: { name: 'Bug' },
+            priority: { name: params.priority },
+            labels: ['zabbix', 'monitoring']
+        }
+    };
+    
+    var response = req.post(jira_url, JSON.stringify(issue));
+    var result = JSON.parse(response);
+    
+    return 'Created: ' + result.key;
+} catch (error) {
+    throw 'JIRA integration failed: ' + error;
+}
+```
+
+**5. PagerDuty интеграция:**
+```javascript
+try {
+    var params = JSON.parse(value);
+    var req = new HttpRequest();
+    req.addHeader('Content-Type: application/json');
+    
+    var routing_key = '<YOUR_INTEGRATION_KEY>';
+    var url = 'https://events.pagerduty.com/v2/enqueue';
+    
+    var event_action = params.event_value === '1' ? 'trigger' : 'resolve';
+    
+    var payload = {
+        routing_key: routing_key,
+        event_action: event_action,
+        dedup_key: params.trigger_id,
+        payload: {
+            summary: params.subject,
+            severity: params.severity.toLowerCase(),
+            source: params.host,
+            custom_details: {
+                message: params.message,
+                event_id: params.event_id
+            }
+        }
+    };
+    
+    req.post(url, JSON.stringify(payload));
+    return 'OK';
+} catch (error) {
+    throw 'PagerDuty notification failed: ' + error;
+}
+```
+
+**External Scripts:**
+
+Zabbix может вызывать внешние скрипты для уведомлений:
+
+```bash
+# /usr/lib/zabbix/alertscripts/custom_alert.sh
+#!/bin/bash
+
+TO="$1"
+SUBJECT="$2"
+MESSAGE="$3"
+
+# Отправка в Slack
+curl -X POST \
+  -H 'Content-type: application/json' \
+  --data "{\"text\":\"$SUBJECT\n$MESSAGE\"}" \
+  "$TO"
+
+# Или отправка email через mailx
+echo "$MESSAGE" | mailx -s "$SUBJECT" "$TO"
+
+# Или запись в syslog
+logger -t zabbix-alert "$SUBJECT: $MESSAGE"
+
+# Или вызов другого API
+curl -X POST https://api.example.com/alert \
+  -H "Content-Type: application/json" \
+  -d "{\"subject\":\"$SUBJECT\",\"message\":\"$MESSAGE\"}"
+```
+
+Настройка в Zabbix:
+```
+Administration → Media types → Create media type
+Type: Script
+Script name: custom_alert.sh
+
+Parameters:
+  - {ALERT.SENDTO}
+  - {ALERT.SUBJECT}
+  - {ALERT.MESSAGE}
+```
+
+**Zabbix Sender для отправки данных:**
+
+```bash
+# Установка
+apt install zabbix-sender
+
+# Отправка одного значения
+zabbix_sender -z zabbix-server -s "ServerName" -k custom.key -o 100
+
+# Отправка нескольких значений из файла
+cat > data.txt <<EOF
+ServerName custom.metric1 10
+ServerName custom.metric2 20
+ServerName custom.metric3 30
+EOF
+
+zabbix_sender -z zabbix-server -i data.txt
+
+# В скрипте мониторинга
+#!/bin/bash
+VALUE=$(get_custom_metric)
+zabbix_sender -z zabbix-server -s "$(hostname)" -k custom.app.metric -o "$VALUE"
+```
+
+**Zabbix Get для тестирования:**
+
+```bash
+# Установка
+apt install zabbix-get
+
+# Проверка значения item
+zabbix_get -s 192.168.1.100 -k system.cpu.load[percpu,avg1]
+
+# Проверка UserParameter
+zabbix_get -s 192.168.1.100 -k custom.metric[param1,param2]
+
+# С таймаутом
+zabbix_get -s 192.168.1.100 -k web.page.get[localhost] -t 10
+```
+
+**SNMP Trap интеграция:**
+
+```bash
+# Конфигурация для приема SNMP traps
+# /etc/snmp/snmptrapd.conf
+authCommunity log,execute,net public
+perl do "/usr/share/zabbix/snmptraps/zabbix_trap_receiver.pl";
+
+# Запуск snmptrapd
+systemctl enable snmptrapd
+systemctl start snmptrapd
+
+# В Zabbix создать item
+Type: SNMP trap
+Key: snmptrap.fallback
+Type of information: Log
+```
+
+**Database как источник данных:**
+
+```yaml
+# ODBC monitoring
+Configuration → Hosts → Items → Create item
+
+Type: Database monitor
+Key: db.odbc.select[description,dsn]
+Database monitoring: <SQL query>
+User: <username>
+Password: <password>
+
+# Пример SQL
+SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL 1 HOUR
+```
+
+### 💻 Задание
+
+Настрой интеграции с внешними системами:
+
+1. **Создай Telegram бота для уведомлений**
+   
+   ```bash
+   # 1. Создай бота через @BotFather в Telegram
+   # Получи token
+   
+   # 2. Получи chat_id
+   # Отправь сообщение своему боту, затем:
+   curl https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates | jq
+   # Найди chat.id
+   
+   # 3. В Zabbix Web UI
+   # Administration → Media types → Create media type
+   # Name: Telegram
+   # Type: Webhook
+   # Добавь параметры:
+   # - bot_token: <YOUR_TOKEN>
+   # - chat_id: {ALERT.SENDTO}
+   # - message: {ALERT.MESSAGE}
+   # - severity: {EVENT.SEVERITY}
+   
+   # Script (JavaScript):
+   ```
+   
+   ```javascript
+   try {
+       var params = JSON.parse(value);
+       var req = new HttpRequest();
+       
+       var url = 'https://api.telegram.org/bot' + params.bot_token + '/sendMessage';
+       
+       var severity_emoji = {
+           'Disaster': '🔴',
+           'High': '🟠',
+           'Average': '🟡',
+           'Warning': '🟢',
+           'Information': '🔵',
+           'Not classified': '⚪'
+       };
+       
+       var emoji = severity_emoji[params.severity] || '⚪';
+       var message = emoji + ' *' + params.severity + '*\n\n' + params.message;
+       
+       var payload = {
+           chat_id: params.chat_id,
+           text: message,
+           parse_mode: 'Markdown'
+       };
+       
+       req.addHeader('Content-Type: application/json');
+       var response = req.post(url, JSON.stringify(payload));
+       
+       if (req.getStatus() != 200) {
+           throw 'Response code: ' + req.getStatus();
+       }
+       
+       return 'OK';
+   } catch (error) {
+       throw 'Telegram notification failed: ' + error;
+   }
+   ```
+   
+   ```bash
+   # 4. Добавь media пользователю
+   # Administration → Users → Admin → Media → Add
+   # Type: Telegram
+   # Send to: <YOUR_CHAT_ID>
+   ```
+
+2. **Создай custom external script**
+   
+```bash
+   # Создай скрипт для логирования в syslog
+   cat > /usr/lib/zabbix/alertscripts/syslog_alert.sh <<'EOF'
+   #!/bin/bash
+   
+   TO="$1"
+   SUBJECT="$2"
+   MESSAGE="$3"
+   
+   # Определяем priority по subject
+   if echo "$SUBJECT" | grep -q "Disaster\|High"; then
+       PRIORITY="alert"
+   elif echo "$SUBJECT" | grep -q "Average\|Warning"; then
+       PRIORITY="warning"
+   else
+       PRIORITY="info"
+   fi
+   
+   # Отправляем в syslog
+   logger -t zabbix-alert -p user.$PRIORITY "$SUBJECT: $MESSAGE"
+   
+   # Также пишем в файл для истории
+   echo "[$(date)] [$PRIORITY] $SUBJECT" >> /var/log/zabbix_alerts.log
+   echo "$MESSAGE" >> /var/log/zabbix_alerts.log
+   echo "---" >> /var/log/zabbix_alerts.log
+   
+   exit 0
+   EOF
+   
+   chmod +x /usr/lib/zabbix/alertscripts/syslog_alert.sh
+   
+   # В Zabbix Web UI
+   # Administration → Media types → Create media type
+   # Type: Script
+   # Script name: syslog_alert.sh
+   # Script parameters:
+   #   {ALERT.SENDTO}
+   #   {ALERT.SUBJECT}
+   #   {ALERT.MESSAGE}
+```
+
+3. **Настрой Zabbix Sender для отправки custom метрик**
+   
+```bash
+   # Установи zabbix-sender
+   apt install zabbix-sender
+   
+   # Создай Trapper item в Zabbix
+   # Configuration → Hosts → TestServer → Items → Create item
+   # Name: Custom Application Metric
+   # Type: Zabbix trapper
+   # Key: custom.app.value
+   # Type of information: Numeric (float)
+   
+   # Создай скрипт для отправки метрик
+   cat > /usr/local/bin/send_custom_metric.sh <<'EOF'
+   #!/bin/bash
+   
+   ZABBIX_SERVER="localhost"
+   HOSTNAME="TestServer"
+   
+   # Получаем значение метрики (например, из приложения)
+   METRIC_VALUE=$(echo "scale=2; $RANDOM / 100" | bc)
+   
+   # Отправляем в Zabbix
+   zabbix_sender -z "$ZABBIX_SERVER" \
+                 -s "$HOSTNAME" \
+                 -k "custom.app.value" \
+                 -o "$METRIC_VALUE"
+   EOF
+   
+   chmod +x /usr/local/bin/send_custom_metric.sh
+   
+   # Добавь в cron для периодической отправки
+   echo "*/5 * * * * /usr/local/bin/send_custom_metric.sh" | crontab -
+   
+   # Проверь
+   /usr/local/bin/send_custom_metric.sh
+```
+
+4. **Создай Dashboard в Grafana с данными из Zabbix**
+   
+   ```bash
+   # Если Grafana не установлена
+   docker run -d \
+     -p 3000:3000 \
+     -e "GF_INSTALL_PLUGINS=alexanderzobnin-zabbix-app" \
+     --name=grafana \
+     grafana/grafana
+   
+   # Логин: admin / admin
+   
+   # В Grafana UI:
+   # 1. Configuration → Plugins → Zabbix → Enable
+   # 2. Configuration → Data Sources → Add data source → Zabbix
+   #    URL: http://host.docker.internal:8080/api_jsonrpc.php
+   #    Username: Admin
+   #    Password: zabbix
+   # 3. Create → Dashboard → Add new panel
+   #    Data source: Zabbix
+   #    Group: Linux servers
+   #    Host: TestServer
+   #    Application: CPU
+   #    Item: CPU utilization
+   ```
+
+5. **Проверь все интеграции**
+   ```bash
+   # Создай тестовую проблему
+   # В Zabbix создай trigger с низким порогом
+   
+   # Проверь получение уведомлений:
+   # - В Telegram
+   # - В syslog: tail -f /var/log/syslog | grep zabbix
+   # - В файле: tail -f /var/log/zabbix_alerts.log
+   
+   # Проверь метрики в Grafana
+   ```
+
+### 🚀 Бонус (новое)
+
+**Интеграция с Kubernetes:**
+
+```yaml
+# Мониторинг Kubernetes через Zabbix
+# Используя Zabbix Kubernetes monitoring
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: zabbix-agent-config
+  namespace: monitoring
+data:
+  zabbix_agentd.conf: |
+    Server=zabbix-server
+    ServerActive=zabbix-server
+    Hostname=k8s-cluster
+    
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: zabbix-agent
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: zabbix-agent
+  template:
+    metadata:
+      labels:
+        app: zabbix-agent
+    spec:
+      hostNetwork: true
+      hostPID: true
+      containers:
+      - name: zabbix-agent
+        image: zabbix/zabbix-agent2:alpine-6.4-latest
+        env:
+        - name: ZBX_SERVER_HOST
+          value: "zabbix-server"
+        - name: ZBX_HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        volumeMounts:
+        - name: proc
+          mountPath: /host/proc
+          readOnly: true
+        - name: sys
+          mountPath: /host/sys
+          readOnly: true
+      volumes:
+      - name: proc
+        hostPath:
+          path: /proc
+      - name: sys
+        hostPath:
+          path: /sys
+```
+
+**Webhook для автоматического создания maintenance:**
+
+```python
+#!/usr/bin/env python3
+# Flask webhook для автоматизации maintenance
+
+from flask import Flask, request
+from pyzabbix import ZabbixAPI
+from datetime import datetime, timedelta
+
+app = Flask(__name__)
+
+@app.route('/maintenance/create', methods=['POST'])
+def create_maintenance():
+    data = request.json
+    
+    zapi = ZabbixAPI('http://localhost:8080')
+    zapi.login('Admin', 'zabbix')
+    
+    # Получаем hosts
+    hosts = zapi.host.get(
+        filter={'host': data['hosts']},
+        output=['hostid']
+    )
+    host_ids = [h['hostid'] for h in hosts]
+    
+    # Создаем maintenance
+    now = int(datetime.now().timestamp())
+    duration = data.get('duration_hours', 2) * 3600
+    
+    maintenance = zapi.maintenance.create(
+        name=f"Auto Maintenance - {data.get('reason', 'Deployment')}",
+        active_since=now,
+        active_till=now + duration,
+        hostids=host_ids,
+        timeperiods=[{
+            'timeperiod_type': 0,
+            'start_date': now,
+            'period': duration
+        }]
+    )
+    
+    zapi.user.logout()
+    
+    return {
+        'status': 'success',
+        'maintenance_id': maintenance['maintenanceids'][0],
+        'hosts_count': len(host_ids),
+        'duration_hours': data.get('duration_hours', 2)
+    }
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)
+```
+
+**Использование из CI/CD:**
+```bash
+# В GitLab CI / Jenkins
+curl -X POST http://zabbix-webhook:5000/maintenance/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "hosts": ["web01", "web02"],
+    "duration_hours": 1,
+    "reason": "Deployment v2.5.0"
+  }'
+```
+
+---
+
+## Модуль 10: Оптимизация и производительность (30 минут)
+
+### 🎯 Напоминалка
+
+**Оптимизация производительности Zabbix:**
+
+**1. Database оптимизация:**
+
+```sql
+-- Проверка размера таблиц
+SELECT 
+  table_name,
+  ROUND(((data_length + index_length) / 1024 / 1024), 2) AS "Size (MB)"
+FROM information_schema.TABLES
+WHERE table_schema = "zabbix"
+ORDER BY (data_length + index_length) DESC;
+
+-- Самые большие таблицы:
+-- history* - численные данные
+-- trends* - агрегированные данные
+-- events - события
+
+-- Партиционирование больших таблиц (MySQL)
+ALTER TABLE history_uint PARTITION BY RANGE (clock) (
+  PARTITION p2024_12 VALUES LESS THAN (UNIX_TIMESTAMP('2025-01-01')),
+  PARTITION p2025_01 VALUES LESS THAN (UNIX_TIMESTAMP('2025-02-01')),
+  PARTITION p2025_02 VALUES LESS THAN (UNIX_TIMESTAMP('2025-03-01')),
+  PARTITION p_future VALUES LESS THAN MAXVALUE
+);
+
+-- Удаление старых партиций
+ALTER TABLE history_uint DROP PARTITION p2024_11;
+
+-- Индексы для ускорения
+CREATE INDEX events_clock ON events(clock);
+CREATE INDEX history_clock ON history(clock);
+
+-- Анализ медленных запросов
+SET GLOBAL slow_query_log = 'ON';
+SET GLOBAL long_query_time = 2;
+```
+
+**2. Housekeeping оптимизация:**
+
+```yaml
+Administration → General → Housekeeping
+
+Settings:
+  Enable internal housekeeping: Yes
+  
+Data storage period:
+  Events and alerts: 90 days
+  Services: 90 days
+  Audit: 90 days
+  User sessions: 90 days
+  History: 90 days      # Можно снизить до 30-60
+  Trends: 365 days      # Или больше для долгосрочного анализа
+  
+Override item history/trend period:
+  Enable: Yes
+  # Для конкретных items можно установить меньший период
+```
+
+**Партиционирование через скрипт:**
+```bash
+# Автоматическое партиционирование
+# https://github.com/cavaliercoder/zabbix-partition-manager
+
+git clone https://github.com/cavaliercoder/zabbix-partition-manager
+cd zabbix-partition-manager
+
+# Конфигурация
+cat > config.yml <<EOF
+database:
+  host: localhost
+  port: 3306
+  name: zabbix
+  user: zabbix
+  password: password
+
+tables:
+  - name: history
+    partition_period: day
+    retention_period: 90
+  - name: history_uint
+    partition_period: day
+    retention_period: 90
+  - name: trends
+    partition_period: month
+    retention_period: 365
+EOF
+
+# Добавь в cron
+echo "0 2 * * * /path/to/partition-manager.py -c config.yml" | crontab -
+```
+
+**3. Server конфигурация:**
+
+```bash
+# /etc/zabbix/zabbix_server.conf
+
+### Cache оптимизация ###
+CacheSize=256M              # Кэш конфигурации (больше для >1000 хостов)
+HistoryCacheSize=128M       # Кэш для истории данных
+HistoryIndexCacheSize=64M   # Индекс кэша истории
+TrendCacheSize=32M          # Кэш для трендов
+ValueCacheSize=256M         # Кэш значений items
+
+### Process оптимизация ###
+StartPollers=20             # Поллеры для пассивных проверок
+StartPollersUnreachable=5   # Для недоступных хостов
+StartTrappers=10            # Для active checks и trappers
+StartPingers=5              # ICMP проверки
+StartDiscoverers=3          # Discovery процессы
+StartHTTPPollers=5          # HTTP agent checks
+StartTimers=2               # Таймеры
+StartEscalators=3           # Эскалация
+
+### Database ###
+DBHost=localhost
+DBName=zabbix
+DBUser=zabbix
+DBPassword=password
+
+# Connection pool
+StartDBSyncers=8            # Синхронизаторы БД (больше при высокой нагрузке)
+
+### Timeouts ###
+Timeout=30                  # Таймаут для проверок
+TrapperTimeout=300          # Таймаут trappers
+
+### Logging ###
+LogSlowQueries=3000         # Логировать медленные запросы (мс)
+```
+
+**Рекомендации по ресурсам:**
+
+```yaml
+Малое окружение (до 100 хостов):
+  CPU: 2-4 cores
+  RAM: 4-8 GB
+  Disk: SSD 50 GB
+  Database: MySQL/PostgreSQL на том же сервере
+
+Среднее окружение (100-1000 хостов):
+  CPU: 4-8 cores
+  RAM: 16-32 GB
+  Disk: SSD 200+ GB
+  Database: Отдельный сервер с SSD
+
+Большое окружение (1000+ хостов):
+  CPU: 16+ cores
+  RAM: 64+ GB
+  Disk: NVMe SSD 500+ GB
+  Database: Отдельный кластер
+  Proxy: Множественные для распределения нагрузки
+```
+
+**4. Frontend оптимизация:**
+
+```bash
+# PHP настройки (/etc/php/*/fpm/pool.d/www.conf или php.ini)
+pm.max_children = 50
+pm.start_servers = 10
+pm.min_spare_servers = 5
+pm.max_spare_servers = 20
+pm.max_requests = 500
+
+# PHP memory
+memory_limit = 256M
+max_execution_time = 300
+max_input_time = 300
+post_max_size = 32M
+
+# Nginx cache
+proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=zabbix_cache:10m max_size=1g inactive=60m;
+
+server {
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico)$ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+    
+    location / {
+        proxy_cache zabbix_cache;
+        proxy_cache_valid 200 5m;
+    }
+}
+```
+
+**5. Мониторинг производительности Zabbix:**
+
+```yaml
+Template: Template App Zabbix Server
+
+Key Items для мониторинга:
+  # Queue
+  - zabbix[queue]                    # Items в очереди
+  - zabbix[queue,10m]                # Items задержанные >10мин
+  
+  # Процессы
+  - zabbix[process,poller,avg,busy]  # Загрузка поллеров
+  - zabbix[process,trapper,avg,busy] # Загрузка trappers
+  - zabbix[process,http poller,avg,busy]
+  
+  # Cache
+  - zabbix[vcache,buffer,pfree]      # Свободный кэш %
+  - zabbix[rcache,buffer,pfree]      # Кэш конфигурации
+  
+  # Database
+  - zabbix[requiredperformance]      # Требуемая производительность
+  - zabbix[wcache,values]            # Записей в кэше для БД
+  
+  # Items
+  - zabbix[items]                    # Общее количество items
+  - zabbix[items_unsupported]        # Неподдерживаемые items
+
+Triggers:
+  - Queue is growing
+  - High poller utilization
+  - Cache utilization is high
+  - Required performance is too high
+```
+
+**6. Item оптимизация:**
+
+```yaml
+Лучшие практики:
+  # Увеличь интервалы для некритичных метрик
+  Critical items: 30s-1m
+  Standard items: 5m
+  Non-critical: 10m-1h
+  
+  # Используй calculated items вместо множественных
+  Вместо:
+    - item1: CPU user
+    - item2: CPU system
+    - item3: Total CPU (user+system)
+  Используй:
+    - item1: CPU stats (JSON)
+    - calculated1: JSONPath для user
+    - calculated2: JSONPath для system
+  
+  # Отключи ненужные items в templates
+  Disable items которые не используются
+  
+  # Используй trends вместо history для графиков
+  History: 30 дней
+  Trends: 1-2 года
+  
+  # Для высокочастотных метрик:
+  Preprocessing → Custom multiplier → 0.001
+  Храни в меньшей точности если возможно
+```
+
+**7. Proxy эффективное использование:**
+
+```yaml
+Когда использовать Proxy:
+  - Удаленные локации (>100ms latency)
+  - >500 хостов в одной локации
+  - Требования безопасности (DMZ)
+  - Offline мониторинг
+  
+Распределение нагрузки:
+  Location 1: Proxy1 (500 hosts)
+  Location 2: Proxy2 (500 hosts)
+  Location 3: Proxy3 (500 hosts)
+  Central: Server (агрегация)
+  
+Результат:
+  - Сниженная нагрузка на Server
+  - Быстрее response time
+  - Более надежный мониторинг
+```
+
+**8.
+
+
+---

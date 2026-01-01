@@ -6299,7 +6299,1447 @@ status-website:
 ```
 
 ---
-## Модуль 9: Infrastructure as Code для мониторинга (35 минут)
+## Модуль 9: SLI/SLO/SLA и Error Budget - Site Reliability Engineering (40 минут)
+
+### 🎯 Напоминалка
+
+**SRE основные концепции:**
+
+```
+SLA (Service Level Agreement)
+├─ Юридическое соглашение с клиентом
+├─ Обязательство уровня сервиса
+└─ Обычно: 99.9%, 99.95%, 99.99%
+
+SLO (Service Level Objective)
+├─ Внутренняя цель надежности
+├─ Строже чем SLA (буфер безопасности)
+└─ Используется для принятия решений
+
+SLI (Service Level Indicator)
+├─ Метрика измеряющая качество сервиса
+├─ Availability, Latency, Error Rate
+└─ Основа для SLO
+
+Error Budget
+├─ Допустимое количество ошибок
+├─ 100% - SLO = Error Budget
+└─ Баланс между надежностью и скоростью
+```
+
+**Пример расчета:**
+
+```
+SLA: 99.9% uptime в месяц
+SLO: 99.95% uptime (внутренняя цель, строже SLA)
+
+Error Budget = 100% - 99.95% = 0.05%
+
+В месяц (30 дней):
+Total time: 30 * 24 * 60 = 43,200 минут
+Error Budget: 43,200 * 0.0005 = 21.6 минут downtime допустимо
+
+Если использовали 10 минут downtime:
+Remaining Budget: 21.6 - 10 = 11.6 минут
+Budget consumed: 10/21.6 = 46.3%
+```
+
+**Типы SLI:**
+
+**1. Availability (доступность):**
+
+```
+SLI = successful_requests / total_requests
+
+Example:
+- Successful: 999,500
+- Failed: 500
+- Total: 1,000,000
+- Availability = 999,500 / 1,000,000 = 99.95%
+```
+
+**2. Latency (задержка):**
+
+```
+SLI = requests_under_threshold / total_requests
+
+Example (threshold = 200ms):
+- Under 200ms: 995,000
+- Over 200ms: 5,000
+- Total: 1,000,000
+- Latency SLI = 995,000 / 1,000,000 = 99.5%
+```
+
+**3. Error Rate (частота ошибок):**
+
+```
+SLI = (total_requests - error_requests) / total_requests
+
+Example:
+- Total: 1,000,000
+- Errors (5xx): 300
+- Error Rate SLI = (1,000,000 - 300) / 1,000,000 = 99.97%
+```
+
+**4. Throughput (пропускная способность):**
+
+```
+SLI = actual_throughput >= target_throughput
+
+Example:
+- Target: 1000 req/sec
+- Actual: 1050 req/sec
+- SLI = 100% (meets target)
+```
+
+**SLO Types (типы целей):**
+
+**Request-based SLO:**
+
+yaml
+
+```yaml
+# 99.9% requests должны быть успешными
+slo:
+  type: request_based
+  target: 99.9
+  sli:
+    total_query: sum(rate(http_requests_total[5m]))
+    good_query: sum(rate(http_requests_total{status!~"5.."}[5m]))
+```
+
+**Window-based SLO:**
+
+yaml
+
+````yaml
+# 99.9% времени сервис должен быть доступен
+slo:
+  type: window_based
+  target: 99.9
+  window: 30d
+  sli:
+    good_query: sum(up == 1)
+    total_query: count(up)
+````
+
+**Multi-window SLO (Google SRE подход):**
+```
+Short window (1 hour):
+- Alert if burn rate > 14.4x (исчерпаем budget за 2 часа)
+- Severity: Critical
+
+Medium window (6 hours):
+- Alert if burn rate > 6x (исчерпаем budget за 5 дней)
+- Severity: High
+
+Long window (3 days):
+- Alert if burn rate > 1x (исчерпаем budget за 30 дней)
+- Severity: Warning
+```
+
+**Error Budget Policy:**
+```
+100% Error Budget остается:
+✅ Ship новые features
+✅ Делать рискованные изменения
+✅ Минимальные on-call дежурства
+
+< 50% Error Budget остается:
+⚠️  Замедлить releases
+⚠️  Code freeze для non-critical features
+⚠️  Фокус на reliability
+
+0% Error Budget исчерпан:
+❌ Полный code freeze
+❌ Только bug fixes и reliability improvements
+❌ Post-mortem анализ
+❌ Дополнительные on-call ресурсы
+````
+
+**SLI/SLO для разных компонентов:**
+
+**API Service:**
+
+yaml
+
+```yaml
+slis:
+  - name: availability
+    description: "Процент успешных API запросов"
+    query: |
+      sum(rate(http_requests_total{status!~"5.."}[5m]))
+      /
+      sum(rate(http_requests_total[5m]))
+    
+  - name: latency
+    description: "P95 latency под 200ms"
+    query: |
+      histogram_quantile(0.95,
+        rate(http_request_duration_seconds_bucket[5m])
+      ) < 0.2
+
+slos:
+  - name: api_availability
+    target: 99.9
+    sli: availability
+    window: 30d
+    
+  - name: api_latency
+    target: 99.5
+    sli: latency
+    window: 30d
+```
+
+**Database:**
+
+yaml
+
+```yaml
+slis:
+  - name: query_success_rate
+    query: |
+      sum(rate(db_queries_total{status="success"}[5m]))
+      /
+      sum(rate(db_queries_total[5m]))
+  
+  - name: query_latency
+    query: |
+      histogram_quantile(0.99,
+        rate(db_query_duration_seconds_bucket[5m])
+      ) < 0.1
+
+slos:
+  - name: db_reliability
+    target: 99.95
+    sli: query_success_rate
+    window: 30d
+```
+
+**Message Queue:**
+
+yaml
+
+```yaml
+slis:
+  - name: message_processing_success
+    query: |
+      sum(rate(queue_messages_processed_total{status="success"}[5m]))
+      /
+      sum(rate(queue_messages_processed_total[5m]))
+  
+  - name: queue_latency
+    query: |
+      queue_oldest_message_age_seconds < 300  # < 5 минут
+
+slos:
+  - name: queue_reliability
+    target: 99.9
+    sli: message_processing_success
+    window: 7d
+```
+
+**Monitoring SLO Compliance:**
+
+promql
+
+```promql
+# Текущий SLO compliance
+(
+  sum(rate(http_requests_total{status!~"5.."}[30d]))
+  /
+  sum(rate(http_requests_total[30d]))
+) * 100
+
+# Error budget remaining (в процентах)
+100 - (
+  (1 - (sum(rate(http_requests_total{status!~"5.."}[30d])) / sum(rate(http_requests_total[30d]))))
+  /
+  (1 - 0.999)  # Target SLO
+) * 100
+
+# Error budget burn rate
+(
+  (1 - (sum(rate(http_requests_total{status!~"5.."}[1h])) / sum(rate(http_requests_total[1h]))))
+  /
+  (1 - 0.999)
+)
+```
+
+**Alerting на SLO нарушения:**
+
+yaml
+
+````yaml
+# Fast burn alert (2 часа до исчерпания)
+- alert: ErrorBudgetBurnRateFast
+  expr: |
+    (
+      (1 - (sum(rate(http_requests_total{status!~"5.."}[5m])) / sum(rate(http_requests_total[5m]))))
+      /
+      (1 - 0.999)  # SLO target
+    ) > 14.4
+  for: 2m
+  labels:
+    severity: critical
+    slo: api_availability
+  annotations:
+    summary: "Fast error budget burn rate detected"
+    description: "At current rate, error budget will be exhausted in 2 hours"
+
+# Slow burn alert (5 дней до исчерпания)
+- alert: ErrorBudgetBurnRateSlow
+  expr: |
+    (
+      (1 - (sum(rate(http_requests_total{status!~"5.."}[1h])) / sum(rate(http_requests_total[1h]))))
+      /
+      (1 - 0.999)
+    ) > 6
+  for: 15m
+  labels:
+    severity: warning
+    slo: api_availability
+  annotations:
+    summary: "Slow error budget burn rate detected"
+    description: "At current rate, error budget will be exhausted in 5 days"
+
+# SLO violation
+- alert: SLOViolation
+  expr: |
+    (
+      sum(rate(http_requests_total{status!~"5.."}[30d]))
+      /
+      sum(rate(http_requests_total[30d]))
+    ) < 0.999
+  for: 5m
+  labels:
+    severity: critical
+    slo: api_availability
+  annotations:
+    summary: "SLO violation - 30 day window"
+    description: "Current availability: {{ $value | humanizePercentage }}"
+```
+
+**SLO Dashboard компоненты:**
+```
+1. Current SLO Status
+   - Gauge: текущий SLI
+   - Target line: SLO
+   - Color coding: green/yellow/red
+
+2. Error Budget
+   - Gauge: оставшийся budget (%)
+   - Graph: burn rate over time
+   - Time to exhaustion
+
+3. Burn Rate
+   - Current burn rate (multiple windows)
+   - Historical burn rate
+   - Alerts status
+
+4. Compliance History
+   - 30-day rolling window
+   - Daily compliance
+   - Incidents impact
+
+5. Budget Consumption
+   - By incident
+   - By service component
+   - By time period
+````
+
+**User Journey SLO (сквозной мониторинг):**
+
+yaml
+
+```yaml
+# Комплексный SLO для критического user journey
+user_journey:
+  name: "Checkout Flow"
+  steps:
+    - name: "Add to Cart"
+      slo: 99.9
+      latency_target: 200ms
+      
+    - name: "View Cart"
+      slo: 99.9
+      latency_target: 300ms
+      
+    - name: "Payment"
+      slo: 99.95  # Строже для критической операции
+      latency_target: 500ms
+      
+    - name: "Order Confirmation"
+      slo: 99.9
+      latency_target: 1000ms
+  
+  overall_slo: 99.7  # Композитный SLO (99.9 * 99.9 * 99.95 * 99.9)
+```
+
+**SLO Report Template:**
+
+markdown
+
+````markdown
+# SLO Report: API Service
+
+**Period:** 2025-01-01 to 2025-01-31
+
+## Summary
+- **SLO Target:** 99.9%
+- **Actual Availability:** 99.87%
+- **Status:** ⚠️ Below Target
+- **Error Budget:** 100% consumed + 30% over
+
+## SLI Breakdown
+
+### Availability
+- Target: 99.9%
+- Actual: 99.87%
+- Total Requests: 100,000,000
+- Failed Requests: 130,000
+- Success Rate: 99.87%
+
+### Latency (P95)
+- Target: < 200ms
+- Actual: 185ms
+- Status: ✅ Met
+
+## Incidents
+
+### Incident #1: Database Outage
+- Date: 2025-01-15
+- Duration: 45 minutes
+- Impact: 100% unavailability
+- Budget Consumed: 90%
+- Root Cause: Primary DB failure, replication lag
+- Action Items: Improve failover automation
+
+### Incident #2: High Latency
+- Date: 2025-01-22
+- Duration: 2 hours
+- Impact: 20% of requests over threshold
+- Budget Consumed: 40%
+- Root Cause: Memory leak in application
+- Action Items: Add memory profiling
+
+## Action Items
+1. [ ] Implement automated database failover
+2. [ ] Add continuous memory profiling
+3. [ ] Increase monitoring sensitivity
+4. [ ] Schedule reliability sprint
+
+## Next Month Forecast
+- If current trend continues: ❌ SLO at risk
+- Recommended: Code freeze for non-critical features
+````
+
+**Tools для SLO мониторинга:**
+```
+1. Sloth (SLO generator)
+   - Generates Prometheus rules
+   - Multi-window alerts
+   - Dashboard generation
+
+2. Pyrra
+   - SLO management UI
+   - Error budget visualization
+   - Alert configuration
+
+3. Grafana SLO Plugin
+   - Native SLO support
+   - Dashboard templates
+   - Integration with Prometheus
+
+4. Google Cloud SLO Monitoring
+   - Managed service
+   - Built-in SLI library
+   - Automated reporting
+
+5. Datadog SLO
+   - SLO tracking
+   - Budget alerts
+   - Integration with incidents
+```
+
+**Cost of Downtime:**
+```
+Расчет business impact:
+
+E-commerce site:
+- Revenue: $10M/month
+- Monthly minutes: 43,200
+- Revenue per minute: $231.48
+- 1 hour downtime = $13,888 loss
+
+SaaS application:
+- Customers: 10,000
+- Churn rate при downtime: 2%
+- Average LTV: $5,000
+- 1 hour downtime = 200 churned customers = $1M loss
+
+Developer productivity:
+- Developers: 50
+- Hourly cost: $100/hour
+- Blocked time per outage: 2 hours
+- Cost: 50 * 100 * 2 = $10,000
+````
+
+### 💻 Задание
+
+Настрой полноценный SLO мониторинг:
+
+1. **Создай SLO конфигурацию с Sloth**:
+
+`slos/api-service.yaml`:
+
+yaml
+
+```yaml
+version: "prometheus/v1"
+service: "api-service"
+labels:
+  owner: "backend-team"
+  tier: "critical"
+slos:
+  # Availability SLO
+  - name: "requests-availability"
+    objective: 99.9
+    description: "API requests должны быть успешными"
+    sli:
+      events:
+        error_query: sum(rate(http_requests_total{job="api",status=~"(5..|429)"}[{{.window}}]))
+        total_query: sum(rate(http_requests_total{job="api"}[{{.window}}]))
+    alerting:
+      name: ApiHighErrorRate
+      labels:
+        category: "availability"
+      annotations:
+        summary: "High error rate on API service"
+      page_alert:
+        labels:
+          severity: critical
+      ticket_alert:
+        labels:
+          severity: warning
+  
+  # Latency SLO
+  - name: "requests-latency"
+    objective: 99.5
+    description: "95% requests должны выполняться за < 200ms"
+    sli:
+      events:
+        error_query: |
+          (
+            sum(rate(http_request_duration_seconds_count{job="api"}[{{.window}}]))
+            -
+            sum(rate(http_request_duration_seconds_bucket{job="api",le="0.2"}[{{.window}}]))
+          )
+        total_query: sum(rate(http_request_duration_seconds_count{job="api"}[{{.window}}]))
+    alerting:
+      name: ApiHighLatency
+      labels:
+        category: "latency"
+      annotations:
+        summary: "High latency on API service"
+      page_alert:
+        labels:
+          severity: critical
+      ticket_alert:
+        labels:
+          severity: warning
+```
+
+`slos/database.yaml`:
+
+yaml
+
+```yaml
+version: "prometheus/v1"
+service: "postgresql"
+labels:
+  owner: "platform-team"
+  tier: "critical"
+slos:
+  # Database availability
+  - name: "connection-availability"
+    objective: 99.95
+    description: "Database должна быть доступна для подключений"
+    sli:
+      events:
+        error_query: sum(rate(pg_up{job="postgres"}[{{.window}}]) == 0)
+        total_query: count(pg_up{job="postgres"})
+    alerting:
+      name: DatabaseUnavailable
+      labels:
+        category: "availability"
+      page_alert:
+        labels:
+          severity: critical
+  
+  # Query performance
+  - name: "query-performance"
+    objective: 99.9
+    description: "Queries должны выполняться за < 100ms"
+    sli:
+      events:
+        error_query: |
+          sum(rate(pg_stat_statements_mean_exec_time{job="postgres"}[{{.window}}])) > 100
+        total_query: sum(rate(pg_stat_statements_calls{job="postgres"}[{{.window}}]))
+    alerting:
+      name: DatabaseSlowQueries
+      labels:
+        category: "performance"
+      ticket_alert:
+        labels:
+          severity: warning
+```
+
+2. **Генерация Prometheus rules с Sloth**:
+
+bash
+
+```bash
+# Установка Sloth
+go install github.com/slok/sloth/cmd/sloth@latest
+
+# Генерация правил
+sloth generate -i slos/api-service.yaml -o prometheus/rules/api-slo.yaml
+sloth generate -i slos/database.yaml -o prometheus/rules/database-slo.yaml
+
+# Валидация
+promtool check rules prometheus/rules/*.yaml
+```
+
+3. **Создай SLO Dashboard в Grafana**:
+
+`dashboards/slo-overview.json`:
+
+json
+
+```json
+{
+  "dashboard": {
+    "title": "SLO Overview",
+    "tags": ["slo", "sre"],
+    "timezone": "browser",
+    "rows": [
+      {
+        "title": "SLO Status",
+        "panels": [
+          {
+            "id": 1,
+            "title": "API Availability SLO",
+            "type": "gauge",
+            "targets": [
+              {
+                "expr": "(\n  sum(rate(http_requests_total{job=\"api\",status!~\"(5..|429)\"}[30d]))\n  /\n  sum(rate(http_requests_total{job=\"api\"}[30d]))\n) * 100",
+                "legendFormat": "Current"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 99,
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    {"value": 99, "color": "red"},
+                    {"value": 99.9, "color": "yellow"},
+                    {"value": 99.95, "color": "green"}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 2,
+            "title": "Error Budget Remaining",
+            "type": "stat",
+            "targets": [
+              {
+                "expr": "100 - (\n  (1 - (sum(rate(http_requests_total{job=\"api\",status!~\"(5..|429)\"}[30d])) / sum(rate(http_requests_total{job=\"api\"}[30d]))))\n  /\n  (1 - 0.999)\n) * 100",
+                "legendFormat": "Budget Remaining"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "thresholds": {
+                  "steps": [
+                    {"value": 0, "color": "red"},
+                    {"value": 25, "color": "yellow"},
+                    {"value": 50, "color": "green"}
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "id": 3,
+            "title": "Burn Rate (1h window)",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "(\n  (1 - (sum(rate(http_requests_total{job=\"api\",status!~\"(5..|429)\"}[1h])) / sum(rate(http_requests_total{job=\"api\"}[1h]))))\n  /\n  (1 - 0.999)\n)",
+                "legendFormat": "Burn Rate"
+              },
+              {
+                "expr": "14.4",
+                "legendFormat": "Critical Threshold (2h to exhaustion)"
+              },
+              {
+                "expr": "6",
+                "legendFormat": "Warning Threshold (5d to exhaustion)"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "title": "SLO Compliance History",
+        "panels": [
+          {
+            "id": 4,
+            "title": "30-Day Rolling Availability",
+            "type": "timeseries",
+            "targets": [
+              {
+                "expr": "(\n  sum(rate(http_requests_total{job=\"api\",status!~\"(5..|429)\"}[30d]))\n  /\n  sum(rate(http_requests_total{job=\"api\"}[30d]))\n) * 100",
+                "legendFormat": "Availability"
+              },
+              {
+                "expr": "99.9",
+                "legendFormat": "SLO Target"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "min": 99,
+                "max": 100
+              }
+            }
+          },
+          {
+            "id": 5,
+            "title": "Error Budget Consumption",
+            "type": "bargauge",
+            "targets": [
+              {
+                "expr": "(\n  (1 - (sum(rate(http_requests_total{job=\"api\",status!~\"(5..|429)\"}[30d])) / sum(rate(http_requests_total{job=\"api\"}[30d]))))\n  /\n  (1 - 0.999)\n) * 100",
+                "legendFormat": "Budget Used"
+              }
+            ],
+            "fieldConfig": {
+              "defaults": {
+                "unit": "percent",
+                "max": 100,
+                "thresholds": {
+                  "steps": [
+                    {"value": 0, "color": "green"},
+                    {"value": 75, "color": "yellow"},
+                    {"value": 100, "color": "red"}
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+4. **Создай Error Budget Policy документ**:
+
+`docs/error-budget-policy.md`:
+
+markdown
+
+````markdown
+# Error Budget Policy
+
+## Overview
+This document defines how we use error budgets to balance reliability and feature velocity.
+
+## SLO Targets
+
+| Service | SLO Target | Error Budget (30d) | Error Budget (minutes) |
+|---------|------------|-------------------|----------------------|
+| API Service | 99.9% | 0.1% | 43.2 minutes |
+| Database | 99.95% | 0.05% | 21.6 minutes |
+| Message Queue | 99.9% | 0.1% | 43.2 minutes |
+| CDN | 99.99% | 0.01% | 4.3 minutes |
+
+## Policy Levels
+
+### 🟢 Level 1: Budget Healthy (> 50% remaining)
+
+**Allowed Activities:**
+- ✅ Normal release cadence
+- ✅ Experimental features
+- ✅ Performance optimizations
+- ✅ Refactoring
+
+**Requirements:**
+- Standard change management process
+- Automated testing
+- Gradual rollouts
+
+### 🟡 Level 2: Budget Warning (25-50% remaining)
+
+**Allowed Activities:**
+- ⚠️ Reduced release frequency
+- ⚠️ Critical features only
+- ⚠️ Additional testing required
+
+**Requirements:**
+- Senior engineer approval for changes
+- Extended canary periods
+- Increased monitoring
+- Daily budget reviews
+
+**Actions:**
+- Conduct incident review
+- Identify systemic issues
+- Create reliability improvement tasks
+- Schedule reliability sprint
+
+### 🔴 Level 3: Budget Critical (< 25% remaining)
+
+**Allowed Activities:**
+- ❌ Feature freeze
+- ✅ Bug fixes only
+- ✅ Reliability improvements
+- ✅ Emergency security patches
+
+**Requirements:**
+- Director-level approval for any changes
+- Mandatory post-mortems for all incidents
+- 24/7 on-call rotation
+- Hourly budget monitoring
+
+**Actions:**
+- Emergency reliability review
+- All hands on stability
+- External communication about delays
+- Executive escalation
+
+### ⛔ Level 4: Budget Exhausted (0% remaining)
+
+**Allowed Activities:**
+- ❌ Complete code freeze
+- ✅ Critical bug fixes only (with VP approval)
+- ✅ Incident response
+
+**Requirements:**
+- VP Engineering approval for ANY change
+- Full post-mortem for budget exhaustion
+- Recovery plan required before resuming features
+- Daily executive updates
+
+**Actions:**
+- Immediate incident declared
+- Full team mobilization
+- Customer communication
+- Systematic root cause analysis
+- Multi-week recovery plan
+
+## Escalation
+```
+Budget < 50% → Team Lead notified
+Budget < 25% → Engineering Manager notified
+Budget < 10% → Director notified
+Budget exhausted → VP Engineering notified
+```
+
+## Review Process
+
+- **Daily:** Automated budget reports
+- **Weekly:** Team review of budget trends
+- **Monthly:** SLO report to stakeholders
+- **Quarterly:** Policy review and adjustment
+
+## Exceptions
+
+Exceptions to this policy require:
+1. Written justification
+2. Risk assessment
+3. Approval from Director of Engineering
+4. Documentation in incident log
+
+## Contact
+
+- **Policy Owner:** SRE Team
+- **Questions:** #sre-team Slack channel
+- **Escalations:** oncall-sre@company.com
+````
+
+5. **Создай автоматический SLO reporter**:
+
+`scripts/slo-report.py`:
+
+python
+
+```python
+#!/usr/bin/env python3
+"""
+Automated SLO Report Generator
+"""
+import requests
+from datetime import datetime, timedelta
+import json
+
+class SLOReporter:
+    def __init__(self, prometheus_url, period_days=30):
+        self.prometheus_url = prometheus_url
+        self.period_days = period_days
+        self.slos = self.load_slo_config()
+    
+    def load_slo_config(self):
+        """Load SLO configuration"""
+        return {
+            'api-availability': {
+                'name': 'API Availability',
+                'target': 99.9,
+                'query': '''
+                    (
+                      sum(rate(http_requests_total{job="api",status!~"(5..|429)"}[30d]))
+                      /
+                      sum(rate(http_requests_total{job="api"}[30d]))
+                    ) * 100
+                '''
+            },
+            'api-latency': {
+                'name': 'API Latency (P95 < 200ms)',
+                'target': 99.5,
+                'query': '''
+                    (
+                      sum(rate(http_request_duration_seconds_bucket{job="api",le="0.2"}[30d]))
+                      /
+                      sum(rate(http_request_duration_seconds_count{job="api"}[30d]))
+                    ) * 100
+                '''
+            },
+            'database-availability': {
+                'name': 'Database Availability',
+                'target': 99.95,
+                'query': '''
+                    (sum(up{job="postgres"}) / count(up{job="postgres"})) * 100
+                '''
+            }
+        }
+    
+    def query_prometheus(self, query):
+        """Execute Prometheus query"""
+        response = requests.get(
+            f"{self.prometheus_url}/api/v1/query",
+            params={'query': query}
+        )
+        data = response.json()
+        
+        if data['status'] == 'success' and data['data']['result']:
+            return float(data['data']['result'][0]['value'][1])
+        return None
+    
+    def calculate_error_budget(self, actual, target):
+        """Calculate error budget consumption"""
+        total_budget = 100 - target
+        consumed = target - actual
+        
+        if consumed < 0:
+            return 0.0  # Over-performing
+        
+        budget_consumed_pct = (consumed / total_budget) * 100
+        return min(budget_consumed_pct, 100.0)
+    
+    def get_downtime_minutes(self, availability_pct):
+        """Calculate downtime in minutes"""
+        total_minutes = self.period_days * 24 * 60
+        uptime_minutes = total_minutes * (availability_pct / 100)
+        downtime_minutes = total_minutes - uptime_minutes
+        return downtime_minutes
+    
+    def determine_status(self, actual, target):
+        """Determine SLO status"""
+        if actual >= target:
+            return "✅ Met"
+        elif actual >= target - 0.05:
+            return "⚠️ At Risk"
+        else:
+            return "❌ Violated"
+    
+    def generate_report(self):
+        """Generate complete SLO report"""
+        report = {
+            'period': f"{self.period_days} days",
+            'generated_at': datetime.now().isoformat(),
+            'slos': {}
+        }
+        
+        for slo_id, slo_config in self.slos.items():
+            actual = self.query_prometheus(slo_config['query'])
+            
+            if actual is None:
+                continue
+            
+            target = slo_config['target']
+            budget_consumed = self.calculate_error_budget(actual, target)
+            status = self.determine_status(actual, target)
+            downtime = self.get_downtime_minutes(actual)
+            
+            report['slos'][slo_id] = {
+                'name': slo_config['name'],
+                'target': target,
+                'actual': round(actual, 4),
+                'status': status,
+                'error_budget_consumed': round(budget_consumed, 2),
+                'error_budget_remaining': round(100 - budget_consumed, 2),
+                'downtime_minutes': round(downtime, 2)
+            }
+        
+        return report
+    
+    def format_markdown(self, report):
+        """Format report as Markdown"""
+        md = f"""# SLO Report
+
+**Period:** {report['period']}  
+**Generated:** {report['generated_at']}
+
+## Summary
+
+| SLO | Target | Actual | Status | Budget Used | Budget Remaining | Downtime |
+|-----|--------|--------|--------|-------------|-----------------|----------|
+"""
+        
+        for slo_id, slo_data in report['slos'].items():
+            md += f"| {slo_data['name']} "
+            md += f"| {slo_data['target']}% "
+            m
+```
+
+Продолжи создание документа
+
+14:06
+
++= f"| {slo_data['actual']}% " md += f"| {slo_data['status']} " md += f"| {slo_data['error_budget_consumed']}% " md += f"| {slo_data['error_budget_remaining']}% " md += f"| {slo_data['downtime_minutes']:.1f} min |\n"
+
+```
+    # Add recommendations
+    md += "\n## Recommendations\n\n"
+    
+    for slo_id, slo_data in report['slos'].items():
+        if slo_data['error_budget_remaining'] < 25:
+            md += f"- ⚠️ **{slo_data['name']}**: Error budget critical. Implement code freeze.\n"
+        elif slo_data['error_budget_remaining'] < 50:
+            md += f"- ⚠️ **{slo_data['name']}**: Error budget warning. Reduce release frequency.\n"
+    
+    return md
+
+def send_to_slack(self, report, webhook_url):
+    """Send report to Slack"""
+    # Implementation for Slack webhook
+    pass
+```
+
+if **name** == "**main**": import argparse
+
+```
+parser = argparse.ArgumentParser()
+parser.add_argument('--prometheus-url', default='http://localhost:9090')
+parser.add_argument('--period-days', type=int, default=30)
+parser.add_argument('--format', choices=['json', 'markdown'], default='markdown')
+parser.add_argument('--output', help='Output file')
+
+args = parser.parse_args()
+
+reporter = SLOReporter(args.prometheus_url, args.period_days)
+report = reporter.generate_report()
+
+if args.format == 'json':
+    output = json.dumps(report, indent=2)
+else:
+    output = reporter.format_markdown(report)
+
+if args.output:
+    with open(args.output, 'w') as f:
+        f.write(output)
+else:
+    print(output)
+```
+
+````
+
+Использование:
+```bash
+# Генерация отчета
+python scripts/slo-report.py --prometheus-url http://localhost:9090
+
+# Сохранение в файл
+python scripts/slo-report.py --output reports/slo-report-$(date +%Y%m%d).md
+
+# JSON формат
+python scripts/slo-report.py --format json --output reports/slo-report.json
+```
+
+6. **Создай автоматизацию для Error Budget Policy**:
+
+`scripts/error-budget-enforcer.py`:
+```python
+#!/usr/bin/env python3
+"""
+Error Budget Policy Enforcer
+Автоматически применяет политики на основе остатка error budget
+"""
+import requests
+import sys
+
+class ErrorBudgetEnforcer:
+    def __init__(self, prometheus_url, github_token):
+        self.prometheus_url = prometheus_url
+        self.github_token = github_token
+        self.thresholds = {
+            'healthy': 50,
+            'warning': 25,
+            'critical': 10,
+            'exhausted': 0
+        }
+    
+    def get_error_budget_remaining(self):
+        """Get current error budget remaining percentage"""
+        query = '''
+            100 - (
+              (1 - (sum(rate(http_requests_total{job="api",status!~"(5..|429)"}[30d])) / sum(rate(http_requests_total{job="api"}[30d]))))
+              /
+              (1 - 0.999)
+            ) * 100
+        '''
+        
+        response = requests.get(
+            f"{self.prometheus_url}/api/v1/query",
+            params={'query': query}
+        )
+        data = response.json()
+        
+        if data['status'] == 'success' and data['data']['result']:
+            return float(data['data']['result'][0]['value'][1])
+        return None
+    
+    def determine_level(self, budget_remaining):
+        """Determine current policy level"""
+        if budget_remaining > self.thresholds['healthy']:
+            return 'healthy', '🟢'
+        elif budget_remaining > self.thresholds['warning']:
+            return 'warning', '🟡'
+        elif budget_remaining > self.thresholds['critical']:
+            return 'critical', '🔴'
+        else:
+            return 'exhausted', '⛔'
+    
+    def enable_github_protections(self, level):
+        """Enable GitHub branch protections based on level"""
+        # Implementation for GitHub API
+        protections = {
+            'healthy': {
+                'required_approving_review_count': 1,
+                'dismiss_stale_reviews': False
+            },
+            'warning': {
+                'required_approving_review_count': 2,
+                'dismiss_stale_reviews': True
+            },
+            'critical': {
+                'required_approving_review_count': 3,
+                'dismiss_stale_reviews': True,
+                'require_code_owner_reviews': True
+            },
+            'exhausted': {
+                'required_approving_review_count': 4,
+                'dismiss_stale_reviews': True,
+                'require_code_owner_reviews': True,
+                'required_status_checks': ['director-approval']
+            }
+        }
+        
+        return protections.get(level, protections['healthy'])
+    
+    def send_notification(self, level, budget_remaining, icon):
+        """Send notification to team"""
+        messages = {
+            'healthy': f"{icon} Error budget healthy: {budget_remaining:.1f}% remaining",
+            'warning': f"{icon} Error budget warning: {budget_remaining:.1f}% remaining. Reduce release frequency.",
+            'critical': f"{icon} Error budget critical: {budget_remaining:.1f}% remaining. Feature freeze recommended.",
+            'exhausted': f"{icon} Error budget exhausted! Complete code freeze in effect."
+        }
+        
+        print(messages[level])
+        # Implementation for Slack/Email notifications
+    
+    def enforce(self):
+        """Enforce error budget policy"""
+        budget_remaining = self.get_error_budget_remaining()
+        
+        if budget_remaining is None:
+            print("❌ Could not retrieve error budget data")
+            sys.exit(1)
+        
+        level, icon = self.determine_level(budget_remaining)
+        
+        print(f"\n{icon} Current Error Budget: {budget_remaining:.2f}%")
+        print(f"Policy Level: {level.upper()}")
+        
+        # Apply protections
+        protections = self.enable_github_protections(level)
+        print(f"\nGitHub Protections: {protections}")
+        
+        # Send notifications
+        self.send_notification(level, budget_remaining, icon)
+        
+        return level, budget_remaining
+
+if __name__ == "__main__":
+    import os
+    
+    prometheus_url = os.getenv('PROMETHEUS_URL', 'http://localhost:9090')
+    github_token = os.getenv('GITHUB_TOKEN')
+    
+    enforcer = ErrorBudgetEnforcer(prometheus_url, github_token)
+    level, budget = enforcer.enforce()
+    
+    # Exit code based on level
+    exit_codes = {
+        'healthy': 0,
+        'warning': 1,
+        'critical': 2,
+        'exhausted': 3
+    }
+    
+    sys.exit(exit_codes.get(level, 0))
+```
+
+Автоматизация через cron:
+```bash
+# /etc/cron.d/error-budget-enforcer
+*/15 * * * * /usr/local/bin/error-budget-enforcer.py >> /var/log/error-budget.log 2>&1
+```
+
+### 🚀 Бонус (новое)
+
+**1. Composite SLO (комплексный SLO для user journey)**:
+```python
+# composite_slo.py
+class CompositeSLO:
+    """
+    Вычисление composite SLO для multi-step user journey
+    """
+    def __init__(self, steps):
+        self.steps = steps
+    
+    def calculate_composite_slo(self):
+        """
+        Composite SLO = произведение SLO всех шагов
+        """
+        composite = 1.0
+        for step in self.steps:
+            composite *= (step['slo'] / 100)
+        return composite * 100
+    
+    def calculate_step_targets(self, target_composite_slo):
+        """
+        Вычислить необходимые SLO для каждого шага
+        чтобы достичь целевого composite SLO
+        """
+        num_steps = len(self.steps)
+        # Равномерное распределение
+        step_slo = (target_composite_slo / 100) ** (1 / num_steps) * 100
+        return step_slo
+
+# Example
+checkout_flow = CompositeSLO([
+    {'name': 'Add to Cart', 'slo': 99.9},
+    {'name': 'View Cart', 'slo': 99.9},
+    {'name': 'Payment', 'slo': 99.95},
+    {'name': 'Confirmation', 'slo': 99.9}
+])
+
+composite = checkout_flow.calculate_composite_slo()
+print(f"Composite SLO: {composite:.2f}%")
+# Output: 99.65%
+
+# Если хотим 99.9% composite, какой SLO нужен на каждом шаге?
+required_step_slo = checkout_flow.calculate_step_targets(99.9)
+print(f"Required per-step SLO: {required_step_slo:.3f}%")
+# Output: 99.975%
+```
+
+**2. SLO as Code с Terraform**:
+```hcl
+# terraform/slo/main.tf
+resource "grafana_slo" "api_availability" {
+  name        = "API Availability"
+  description = "API requests должны быть успешными"
+  
+  query {
+    type = "prometheus"
+    
+    # Success metric
+    success {
+      metric = "http_requests_total"
+      filters = {
+        job    = "api"
+        status = "!~(5..|429)"
+      }
+    }
+    
+    # Total metric
+    total {
+      metric = "http_requests_total"
+      filters = {
+        job = "api"
+      }
+    }
+  }
+  
+  objectives {
+    value  = 99.9
+    window = "30d"
+  }
+  
+  alerting {
+    fast_burn {
+      enabled   = true
+      threshold = 14.4
+      window    = "1h"
+    }
+    
+    slow_burn {
+      enabled   = true
+      threshold = 6
+      window    = "6h"
+    }
+  }
+  
+  labels = {
+    team     = "backend"
+    service  = "api"
+    tier     = "critical"
+  }
+}
+```
+
+**3. SLO Simulator для testing**:
+```python
+# slo_simulator.py
+import random
+from datetime import datetime, timedelta
+
+class SLOSimulator:
+    """
+    Симулятор для тестирования SLO policies
+    """
+    def __init__(self, target_slo, total_requests_per_day):
+        self.target_slo = target_slo
+        self.total_requests_per_day = total_requests_per_day
+        self.error_budget = 100 - target_slo
+    
+    def simulate_month(self, incident_scenarios):
+        """
+        Симулировать месяц работы с различными сценариями инцидентов
+        """
+        days = 30
+        total_requests = self.total_requests_per_day * days
+        allowed_failures = total_requests * (self.error_budget / 100)
+        
+        print(f"Simulation Parameters:")
+        print(f"  Target SLO: {self.target_slo}%")
+        print(f"  Error Budget: {self.error_budget}%")
+        print(f"  Total Requests (30d): {total_requests:,}")
+        print(f"  Allowed Failures: {allowed_failures:,.0f}")
+        print()
+        
+        actual_failures = 0
+        
+        for scenario in incident_scenarios:
+            duration_minutes = scenario['duration_minutes']
+            failure_rate = scenario['failure_rate']
+            
+            requests_during_incident = (duration_minutes / 1440) * self.total_requests_per_day
+            failures = requests_during_incident * failure_rate
+            
+            actual_failures += failures
+            
+            print(f"Incident: {scenario['name']}")
+            print(f"  Duration: {duration_minutes} minutes")
+            print(f"  Failure Rate: {failure_rate * 100}%")
+            print(f"  Requests Affected: {requests_during_incident:,.0f}")
+            print(f"  Failures: {failures:,.0f}")
+            print()
+        
+        actual_slo = ((total_requests - actual_failures) / total_requests) * 100
+        budget_consumed = (actual_failures / allowed_failures) * 100
+        
+        print(f"Results:")
+        print(f"  Actual SLO: {actual_slo:.4f}%")
+        print(f"  Budget Consumed: {budget_consumed:.1f}%")
+        print(f"  Status: {'✅ Met' if actual_slo >= self.target_slo else '❌ Violated'}")
+        
+        return actual_slo, budget_consumed
+
+# Example usage
+simulator = SLOSimulator(target_slo=99.9, total_requests_per_day=10_000_000)
+
+incidents = [
+    {
+        'name': 'Database Outage',
+        'duration_minutes': 30,
+        'failure_rate': 1.0  # 100% failure
+    },
+    {
+        'name': 'High Latency Event',
+        'duration_minutes': 120,
+        'failure_rate': 0.2  # 20% failure
+    },
+    {
+        'name': 'Partial Service Degradation',
+        'duration_minutes': 60,
+        'failure_rate': 0.5  # 50% failure
+    }
+]
+
+simulator.simulate_month(incidents)
+```
+
+---
+
+## Итоги модуля 8
+
+После прохождения этого модуля ты должен уметь:
+
+✅ Определять правильные SLI для сервисов
+✅ Устанавливать реалистичные SLO targets
+✅ Вычислять и мониторить Error Budget
+✅ Настраивать multi-window alerting
+✅ Создавать SLO dashboards
+✅ Генерировать автоматические SLO reports
+✅ Применять Error Budget Policy
+✅ Вычислять composite SLO
+✅ Балансировать reliability и velocity
+✅ Принимать data-driven решения о releases
+
+**Ключевые принципы SRE:**
+1. SLO определяет target reliability
+2. Error Budget позволяет балансировать риск
+3. Измеряй то, что важно пользователям
+4. Автоматизируй enforcement policies
+5. Используй данные для принятия решений
+6. Регулярно пересматривай SLO targets
+7. Документируй и коммуницируй статус
+````
+---
+## Модуль 10: Infrastructure as Code для мониторинга (35 минут)
 
 ### 🎯 Напоминалка
 
@@ -8277,10 +9717,9 @@ resource "aws_autoscaling_group" "monitoring_workers" {
 6. Документирование изменений
 7. Cost optimization
 
-**Следующий модуль:** SLI/SLO/SLA и Error Budget - продвинутый мониторинг надежности
 
 
-## Модуль 10: Kubernetes Monitoring - мониторинг контейнеров и оркестрации (45 минут)
+## Модуль 11: Kubernetes Monitoring - мониторинг контейнеров и оркестрации (45 минут)
 
 ### 🎯 Напоминалка
 
@@ -9885,7 +11324,7 @@ kube-state-metrics:
 - ✅ Cost tracking и optimization
 
 
-## Модуль 11: Мониторинг инфраструктуры и облачных сервисов (30 минут)
+## Модуль 12: Мониторинг инфраструктуры и облачных сервисов (30 минут)
 
 ### 🎯 Напоминалка
 
@@ -10856,7 +12295,7 @@ if __name__ == '__main__':
 
 ---
 
-**Чеклист модуля 10:**
+**Чеклист модуля 11:**
 
 - ✅ Настроил kube-state-metrics
 - ✅ Создал Kubernetes алерты
@@ -10865,7 +12304,7 @@ if __name__ == '__main__':
 - ✅ Настроил network monitoring (SNMP)
 - ✅  Мониторинг стоимости инфраструктуры
 
-## Модуль 12: Мониторинг в продакшене - Best Practices (15 минут)
+## Модуль 13: Мониторинг в продакшене - Best Practices (15 минут)
 
 ### 🎯 Напоминалка
 
@@ -11555,7 +12994,7 @@ bash
 chmod +x chaos_test.sh
 ./chaos_test.sh
 ```
-## Модуль 13: Финальный проект и карьера (30 минут)
+## Модуль 14: Финальный проект и карьера (30 минут)
 
 ### 🎯 Финальный проект: E-Commerce Monitoring Stack
 

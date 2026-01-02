@@ -4023,7 +4023,7 @@ SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL 1 HOUR
 
 1. **Создай Telegram бота для уведомлений**
    
-   ```bash
+```bash
    # 1. Создай бота через @BotFather в Telegram
    # Получи token
    
@@ -4041,11 +4041,11 @@ SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL 1 HOUR
    # - chat_id: {ALERT.SENDTO}
    # - message: {ALERT.MESSAGE}
    # - severity: {EVENT.SEVERITY}
+```
+
    
+```javascript
    # Script (JavaScript):
-   ```
-   
-   ```javascript
    try {
        var params = JSON.parse(value);
        var req = new HttpRequest();
@@ -4081,14 +4081,14 @@ SELECT COUNT(*) FROM users WHERE last_login > NOW() - INTERVAL 1 HOUR
    } catch (error) {
        throw 'Telegram notification failed: ' + error;
    }
-   ```
+```
    
-   ```bash
+```bash
    # 4. Добавь media пользователю
    # Administration → Users → Admin → Media → Add
    # Type: Telegram
    # Send to: <YOUR_CHAT_ID>
-   ```
+```
 
 2. **Создай custom external script**
    

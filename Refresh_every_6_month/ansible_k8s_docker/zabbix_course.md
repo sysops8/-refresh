@@ -488,7 +488,7 @@ avg(//system.cpu.util,5m)
 **Используй LLD (Low-Level Discovery) для автоматического обнаружения:**
 
 1. **Создай Discovery Rule для дисков**
-   ```bash
+```bash
    # UserParameter для discovery
    cat > /etc/zabbix/zabbix_agent2.d/disk_discovery.conf <<'EOF'
    UserParameter=custom.disk.discovery,/usr/local/bin/disk_discovery.sh

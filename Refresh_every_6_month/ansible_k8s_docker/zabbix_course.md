@@ -417,7 +417,7 @@ avg(//system.cpu.util,5m)
 1. **Создай кастомный UserParameter**
    
    На хосте с агентом:
-   ```bash
+```bash
    # Создай скрипт
    cat > /usr/local/bin/check_service.sh <<'EOF'
    #!/bin/bash

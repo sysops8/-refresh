@@ -2952,7 +2952,7 @@ Item configuration:
 ```
 
 6. **Тест webhook в Slack для нестандартного форматирования**
-   ```javascript
+```javascript
    // Administration → Media types → Create media type
    
    Name: Slack Enhanced

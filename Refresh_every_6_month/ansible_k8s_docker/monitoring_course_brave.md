@@ -1,4 +1,3 @@
-
 # Мониторинг для DevOps: Ежегодный/Полугодовой курс-освежитель
 
 **Цель:** Освежить в памяти ключевые концепции мониторинга за 2-3 часа практики и узнать 1-2 новые продвинутые техники.
@@ -3650,7 +3649,7 @@ Schedule within 24 hours. Template: docs/postmortem-template.md
 - [Service Down](./service-down.md)
 - [High Latency](./high-latency.md)
 - [Database Issues](./database-issues.md)
-```
+
 
 ### 🎯 Критерии успешной сдачи проекта
 
@@ -3809,21 +3808,19 @@ Schedule within 24 hours. Template: docs/postmortem-template.md
 8. Database connection pool utilization
 9. Apdex score (T=300ms)
 10. Memory usage forecast (next 2 hours)
-
-
+```
 ---
 
 ## 🎓 Сертификат о прохождении
 
 ```
-
 ╔════════════════════════════════════════════════════════════╗
 ║                                                            ║
 ║            🎓 СЕРТИФИКАТ О ПРОХОЖДЕНИИ КУРСА               ║
 ║                                                            ║
 ║                 "Мониторинг для DevOps"                    ║
 ║                                                            ║
-║  Настоящий сертификат подтверждает, что                   ║
+║  Настоящий сертификат подтверждает, что                    ║
 ║                                                            ║
 ║                    _______________________                 ║
 ║                                                            ║
@@ -3845,6 +3842,7 @@ Schedule within 24 hours. Template: docs/postmortem-template.md
 ║  Подпись инструктора: _______________                      ║
 ║                                                            ║
 ╚════════════════════════════════════════════════════════════╝
+
 ```
 
 ---

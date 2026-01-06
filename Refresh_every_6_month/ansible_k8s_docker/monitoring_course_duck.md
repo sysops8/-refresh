@@ -889,7 +889,7 @@ json
   "request_id": "abc-123",
   "duration_ms": 5000
 }
-```
+````
 
 **ELK Stack:**
 ```
@@ -906,7 +906,7 @@ Grafana        - Визуализация
 ```
 
 **Log aggregation patterns:**
-```
+````
 ┌──────────┐
 │   App    │────┐
 └──────────┘    │

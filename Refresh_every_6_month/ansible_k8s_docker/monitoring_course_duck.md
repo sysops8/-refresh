@@ -1458,7 +1458,7 @@ if __name__ == "__main__":
         with open('/var/log/app/application.log', 'a') as f:
             f.write(log + '\n')
         time.sleep(random.uniform(0.1, 2))
-```
+````
 
 7. **Открой Grafana и создай dashboard**:
 ```

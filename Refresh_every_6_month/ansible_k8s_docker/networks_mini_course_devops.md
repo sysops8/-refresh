@@ -1270,7 +1270,15 @@ sudo systemctl start nftables
 **DNS иерархия:**
 ````
 
-. (root) ├── com │ ├── google.com │ └── example.com ├── org │ └── wikipedia.org └── net └── cloudflare.net
+. (root)
+├── com
+│   ├── google.com
+│   └── example.com
+├── org
+│   └── wikipedia.org
+└── net
+    └── cloudflare.net
+
 
 # Типы записей DNS
 

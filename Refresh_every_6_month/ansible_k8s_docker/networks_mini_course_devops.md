@@ -23,22 +23,22 @@
 **Модель OSI (7 уровней):**
 
 ```
-7. Application    # HTTP, DNS, SSH, FTP
-8. Presentation   # SSL/TLS, шифрование
-9. Session        # Управление сессиями
-10. Transport      # TCP, UDP
-11. Network        # IP, ICMP, маршрутизация
-12. Data Link      # Ethernet, MAC адреса, коммутация
-13. Physical       # Кабели, сигналы
+7. Application    # HTTP, DNS, FTP, SMTP
+6. Presentation   # SSL/TLS, шифрование, кодирование
+5. Session        # Управление сессиями, keep-alive
+4. Transport      # TCP, UDP
+3. Network        # IP, ICMP, маршрутизация
+2. Data Link      # Ethernet, MAC, ARP, коммутаторы
+1. Physical       # Кабели, сигналы, биты
 ```
 
 **TCP/IP модель (4 уровня):**
 
 ```
-4. Application    # HTTP, DNS, SSH (OSI 5-7)
-5. Transport      # TCP, UDP
-6. Internet       # IP, ICMP, ARP
-7. Network Access # Ethernet, WiFi (OSI 1-2)
+4. Application    # HTTP, DNS, SSH, FTP (OSI 5–7)
+3. Transport      # TCP, UDP
+2. Internet       # IP, ICMP
+1. Network Access # Ethernet, Wi-Fi, ARP (OSI 1–2)
 ```
 
 **IP адресация:**

@@ -3443,13 +3443,603 @@ $ LANGUAGE plpgsql;
 
 -- Функция возвращающая таблицу
 CREATE OR REPLACE FUNCTION get_active_users()
-RETURNS TABLE (id INTEGER, username TEXT, email TEXT) AS $
+RETURNS TABLE (id INTEGER, username TEXT, email TEXT) AS $$
 BEGIN
     RETURN QUERY 
     SELECT u.id, u.username, u.email 
     FROM users u 
     WHERE u.active = true;
 END;
-$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql;
 
 -- Использование
+SELECT * FROM get_active_users();
+
+-- Функция с OUT параметрами
+CREATE OR REPLACE FUNCTION get_user_stats(user_id INTEGER, 
+    OUT total_posts INTEGER, 
+    OUT total_views INTEGER)
+AS $$
+BEGIN
+    SELECT COUNT(*), COALESCE(SUM(views), 0) 
+    INTO total_posts, total_views
+    FROM articles 
+    WHERE author_id = user_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Использование
+SELECT * FROM get_user_stats(1);
+
+-- Функция с условиями
+CREATE OR REPLACE FUNCTION get_user_level(total_points INTEGER)
+RETURNS TEXT AS $$
+BEGIN
+    IF total_points >= 1000 THEN
+        RETURN 'Expert';
+    ELSIF total_points >= 500 THEN
+        RETURN 'Advanced';
+    ELSIF total_points >= 100 THEN
+        RETURN 'Intermediate';
+    ELSE
+        RETURN 'Beginner';
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Функция с циклом
+CREATE OR REPLACE FUNCTION generate_series_text(start_num INTEGER, end_num INTEGER)
+RETURNS TEXT AS $$
+DECLARE
+    result TEXT := '';
+    i INTEGER;
+BEGIN
+    FOR i IN start_num..end_num LOOP
+        result := result || i || ',';
+    END LOOP;
+    RETURN TRIM(TRAILING ',' FROM result);
+END;
+$$ LANGUAGE plpgsql;
+
+-- Функция с обработкой ошибок
+CREATE OR REPLACE FUNCTION safe_divide(numerator NUMERIC, denominator NUMERIC)
+RETURNS NUMERIC AS $$
+BEGIN
+    IF denominator = 0 THEN
+        RAISE EXCEPTION 'Division by zero';
+    END IF;
+    RETURN numerator / denominator;
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE NOTICE 'Error: %', SQLERRM;
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Удаление функции
+DROP FUNCTION IF EXISTS function_name(param_types);
+```
+
+**Процедуры (PostgreSQL 11+):**
+```sql
+-- Процедура (не возвращает значение, может использовать COMMIT)
+CREATE OR REPLACE PROCEDURE update_user_stats()
+LANGUAGE plpgsql AS $$
+BEGIN
+    UPDATE users SET last_login = CURRENT_TIMESTAMP;
+    COMMIT;
+END;
+$$;
+
+-- Вызов процедуры
+CALL update_user_stats();
+
+-- Процедура с параметрами
+CREATE OR REPLACE PROCEDURE archive_old_data(days_old INTEGER)
+LANGUAGE plpgsql AS $$
+BEGIN
+    DELETE FROM logs WHERE created_at < CURRENT_DATE - days_old;
+    COMMIT;
+END;
+$$;
+
+-- Вызов
+CALL archive_old_data(30);
+
+-- Процедура с транзакциями
+CREATE OR REPLACE PROCEDURE batch_insert(batch_size INTEGER)
+LANGUAGE plpgsql AS $$
+DECLARE
+    i INTEGER;
+BEGIN
+    FOR i IN 1..batch_size LOOP
+        INSERT INTO test_table (data) VALUES ('Data ' || i);
+        IF i % 100 = 0 THEN
+            COMMIT;
+        END IF;
+    END LOOP;
+    COMMIT;
+END;
+$$;
+```
+
+**Триггеры:**
+```sql
+-- Функция для триггера
+CREATE OR REPLACE FUNCTION update_modified_timestamp()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Создание триггера
+CREATE TRIGGER update_articles_timestamp
+BEFORE UPDATE ON articles
+FOR EACH ROW
+EXECUTE FUNCTION update_modified_timestamp();
+
+-- Триггер AFTER INSERT
+CREATE OR REPLACE FUNCTION log_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO user_logs (user_id, action, created_at)
+    VALUES (NEW.id, 'created', CURRENT_TIMESTAMP);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER log_user_creation
+AFTER INSERT ON users
+FOR EACH ROW
+EXECUTE FUNCTION log_new_user();
+
+-- Триггер BEFORE DELETE
+CREATE OR REPLACE FUNCTION prevent_admin_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF OLD.role = 'admin' THEN
+        RAISE EXCEPTION 'Cannot delete admin users';
+    END IF;
+    RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER check_admin_delete
+BEFORE DELETE ON users
+FOR EACH ROW
+EXECUTE FUNCTION prevent_admin_delete();
+
+-- Триггер на уровне выражения (statement level)
+CREATE OR REPLACE FUNCTION audit_table_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO audit_log (table_name, operation, timestamp)
+    VALUES (TG_TABLE_NAME, TG_OP, CURRENT_TIMESTAMP);
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER audit_articles
+AFTER INSERT OR UPDATE OR DELETE ON articles
+FOR EACH STATEMENT
+EXECUTE FUNCTION audit_table_changes();
+
+-- Условный триггер (с WHEN)
+CREATE TRIGGER update_timestamp_when_published
+BEFORE UPDATE ON articles
+FOR EACH ROW
+WHEN (NEW.published = true AND OLD.published = false)
+EXECUTE FUNCTION update_modified_timestamp();
+
+-- Отключить/включить триггер
+ALTER TABLE articles DISABLE TRIGGER update_articles_timestamp;
+ALTER TABLE articles ENABLE TRIGGER update_articles_timestamp;
+
+-- Удалить триггер
+DROP TRIGGER IF EXISTS trigger_name ON table_name;
+
+-- Список триггеров
+\dft
+SELECT * FROM information_schema.triggers WHERE event_object_table = 'articles';
+```
+
+**Агрегатные функции:**
+```sql
+-- Встроенные агрегатные функции
+SELECT 
+    COUNT(*) as total,
+    AVG(views) as avg_views,
+    SUM(views) as total_views,
+    MIN(views) as min_views,
+    MAX(views) as max_views,
+    STDDEV(views) as stddev_views
+FROM articles;
+
+-- STRING_AGG (конкатенация строк)
+SELECT 
+    author_id,
+    STRING_AGG(title, ', ' ORDER BY created_at DESC) as articles
+FROM articles
+GROUP BY author_id;
+
+-- ARRAY_AGG (массив значений)
+SELECT 
+    author_id,
+    ARRAY_AGG(id ORDER BY created_at DESC) as article_ids
+FROM articles
+GROUP BY author_id;
+
+-- JSON_AGG (JSON массив)
+SELECT 
+    author_id,
+    JSON_AGG(JSON_BUILD_OBJECT('id', id, 'title', title)) as articles
+FROM articles
+GROUP BY author_id;
+
+-- Создание своей агрегатной функции
+CREATE OR REPLACE FUNCTION median_transfn(state INTEGER[], val INTEGER)
+RETURNS INTEGER[] AS $$
+BEGIN
+    RETURN array_append(state, val);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION median_finalfn(state INTEGER[])
+RETURNS NUMERIC AS $$
+DECLARE
+    sorted INTEGER[];
+    len INTEGER;
+BEGIN
+    sorted := ARRAY(SELECT unnest(state) ORDER BY 1);
+    len := array_length(sorted, 1);
+    IF len % 2 = 0 THEN
+        RETURN (sorted[len/2] + sorted[len/2 + 1]) / 2.0;
+    ELSE
+        RETURN sorted[len/2 + 1];
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE AGGREGATE median(INTEGER) (
+    SFUNC = median_transfn,
+    STYPE = INTEGER[],
+    FINALFUNC = median_finalfn
+);
+
+-- Использование
+SELECT median(views) FROM articles;
+```
+
+**Window Functions:**
+```sql
+-- ROW_NUMBER
+SELECT 
+    title,
+    author_id,
+    views,
+    ROW_NUMBER() OVER (PARTITION BY author_id ORDER BY views DESC) as rank
+FROM articles;
+
+-- RANK и DENSE_RANK
+SELECT 
+    title,
+    views,
+    RANK() OVER (ORDER BY views DESC) as rank,
+    DENSE_RANK() OVER (ORDER BY views DESC) as dense_rank
+FROM articles;
+
+-- LAG и LEAD (предыдущее/следующее значение)
+SELECT 
+    title,
+    created_at,
+    views,
+    LAG(views) OVER (ORDER BY created_at) as previous_views,
+    LEAD(views) OVER (ORDER BY created_at) as next_views
+FROM articles;
+
+-- FIRST_VALUE и LAST_VALUE
+SELECT 
+    title,
+    author_id,
+    views,
+    FIRST_VALUE(title) OVER (PARTITION BY author_id ORDER BY views DESC) as best_article
+FROM articles;
+
+-- Кумулятивная сумма
+SELECT 
+    DATE(created_at) as date,
+    COUNT(*) as daily_count,
+    SUM(COUNT(*)) OVER (ORDER BY DATE(created_at)) as cumulative_count
+FROM articles
+GROUP BY DATE(created_at);
+
+-- Скользящее среднее
+SELECT 
+    DATE(created_at) as date,
+    AVG(views) as avg_views,
+    AVG(AVG(views)) OVER (ORDER BY DATE(created_at) ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) as moving_avg_7days
+FROM articles
+GROUP BY DATE(created_at);
+```
+
+**Хранимые процедуры для batch операций:**
+```sql
+-- Batch update
+CREATE OR REPLACE PROCEDURE batch_update_status(
+    batch_size INTEGER DEFAULT 1000
+)
+LANGUAGE plpgsql AS $$
+DECLARE
+    updated_count INTEGER := 0;
+    total_updated INTEGER := 0;
+BEGIN
+    LOOP
+        UPDATE articles
+        SET status = 'archived'
+        WHERE id IN (
+            SELECT id 
+            FROM articles 
+            WHERE status = 'draft' 
+            AND created_at < CURRENT_DATE - INTERVAL '1 year'
+            LIMIT batch_size
+        );
+        
+        GET DIAGNOSTICS updated_count = ROW_COUNT;
+        total_updated := total_updated + updated_count;
+        
+        EXIT WHEN updated_count = 0;
+        
+        COMMIT;
+        RAISE NOTICE 'Updated % rows (total: %)', updated_count, total_updated;
+    END LOOP;
+    
+    RAISE NOTICE 'Batch update completed. Total rows: %', total_updated;
+END;
+$$;
+
+-- Вызов
+CALL batch_update_status(500);
+```
+
+### 💻 Задание
+
+1. **Создай функции:**
+```sql
+   -- Функция для подсчета статистики автора
+   CREATE OR REPLACE FUNCTION get_author_stats(author_id INTEGER)
+   RETURNS TABLE(
+       total_articles INTEGER,
+       published_articles INTEGER,
+       total_views INTEGER,
+       avg_views NUMERIC
+   ) AS $$
+   BEGIN
+       RETURN QUERY
+       SELECT 
+           COUNT(*)::INTEGER,
+           COUNT(*) FILTER (WHERE published = true)::INTEGER,
+           COALESCE(SUM(views), 0)::INTEGER,
+           COALESCE(AVG(views), 0)::NUMERIC(10,2)
+       FROM articles
+       WHERE articles.author_id = get_author_stats.author_id;
+   END;
+   $$ LANGUAGE plpgsql;
+   
+   -- Функция для очистки старых данных
+   CREATE OR REPLACE FUNCTION cleanup_old_logs(days_old INTEGER)
+   RETURNS INTEGER AS $$
+   DECLARE
+       deleted_count INTEGER;
+   BEGIN
+       DELETE FROM logs 
+       WHERE created_at < CURRENT_DATE - days_old * INTERVAL '1 day';
+       
+       GET DIAGNOSTICS deleted_count = ROW_COUNT;
+       RETURN deleted_count;
+   END;
+   $$ LANGUAGE plpgsql;
+```
+
+2. **Создай триггер:**
+```sql
+   -- Таблица для логирования
+   CREATE TABLE article_changes (
+       id SERIAL PRIMARY KEY,
+       article_id INTEGER,
+       old_title TEXT,
+       new_title TEXT,
+       changed_by TEXT DEFAULT current_user,
+       changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+   );
+   
+   -- Функция триггера
+   CREATE OR REPLACE FUNCTION log_article_title_change()
+   RETURNS TRIGGER AS $$
+   BEGIN
+       IF OLD.title IS DISTINCT FROM NEW.title THEN
+           INSERT INTO article_changes (article_id, old_title, new_title)
+           VALUES (NEW.id, OLD.title, NEW.title);
+       END IF;
+       RETURN NEW;
+   END;
+   $$ LANGUAGE plpgsql;
+   
+   -- Создать триггер
+   CREATE TRIGGER track_article_title_changes
+   AFTER UPDATE ON articles
+   FOR EACH ROW
+   EXECUTE FUNCTION log_article_title_change();
+```
+
+3. **Протестируй функции:**
+   - Вызови `get_author_stats()` для нескольких авторов
+   - Вызови `cleanup_old_logs(30)`
+
+4. **Протестируй триггер:**
+   - Обнови title статьи
+   - Проверь таблицу `article_changes`
+
+5. **Window Functions:**
+   - Выведи ранкинг статей по просмотрам внутри каждой категории
+   - Найди для каждой статьи предыдущую и следующую по дате
+   - Посчитай кумулятивное количество статей по датам
+
+### 🚀 Бонус (новое)
+
+- Создай процедуру для архивации старых данных с партицированием:
+```sql
+  CREATE OR REPLACE PROCEDURE archive_partition(
+      source_table TEXT,
+      archive_table TEXT,
+      cutoff_date DATE
+  )
+  LANGUAGE plpgsql AS $$
+  DECLARE
+      moved_count INTEGER;
+  BEGIN
+      -- Создать архивную таблицу если не существует
+      EXECUTE format(
+          'CREATE TABLE IF NOT EXISTS %I (LIKE %I INCLUDING ALL)',
+          archive_table, source_table
+      );
+      
+      -- Переместить данные
+      EXECUTE format(
+          'WITH moved AS (
+              DELETE FROM %I 
+              WHERE created_at < $1 
+              RETURNING *
+          )
+          INSERT INTO %I SELECT * FROM moved',
+          source_table, archive_table
+      ) USING cutoff_date;
+      
+      GET DIAGNOSTICS moved_count = ROW_COUNT;
+      RAISE NOTICE 'Archived % rows from % to %', 
+          moved_count, source_table, archive_table;
+      
+      COMMIT;
+  END;
+  $$;
+```
+
+- Создай функцию для динамического поиска:
+```sql
+  CREATE OR REPLACE FUNCTION search_articles(
+      search_term TEXT DEFAULT NULL,
+      author_filter INTEGER DEFAULT NULL,
+      published_only BOOLEAN DEFAULT true
+  )
+  RETURNS TABLE(id INTEGER, title TEXT, author_name TEXT, views INTEGER) AS $$
+  BEGIN
+      RETURN QUERY EXECUTE
+          format('
+              SELECT a.id, a.title, au.name, a.views
+              FROM articles a
+              JOIN authors au ON a.author_id = au.id
+              WHERE ($1 IS NULL OR a.title ILIKE ''%%'' || $1 || ''%%'')
+              AND ($2 IS NULL OR a.author_id = $2)
+              AND ($3 = false OR a.published = true)
+              ORDER BY a.views DESC
+          ')
+          USING search_term, author_filter, published_only;
+  END;
+  $$ LANGUAGE plpgsql;
+  
+  -- Использование
+  SELECT * FROM search_articles('PostgreSQL', NULL, true);
+```
+
+---
+
+## 🎓 Заключение
+
+### Что вы освоили:
+
+**Базовые навыки:**
+- ✅ Установка и настройка PostgreSQL
+- ✅ Управление пользователями и правами доступа
+- ✅ Создание и управление таблицами
+- ✅ CRUD операции (INSERT, SELECT, UPDATE, DELETE)
+- ✅ JOIN'ы и подзапросы
+- ✅ Индексы и оптимизация
+
+**Продвинутые техники:**
+- ✅ Транзакции и блокировки
+- ✅ Функции и процедуры (PL/pgSQL)
+- ✅ Триггеры и автоматизация
+- ✅ Window Functions
+- ✅ CTE (Common Table Expressions)
+- ✅ Полнотекстовый поиск
+- ✅ Row Level Security
+
+**DevOps/SysAdmin навыки:**
+- ✅ Резервное копирование и восстановление
+- ✅ Мониторинг и troubleshooting
+- ✅ Настройка производительности
+- ✅ Репликация (основы)
+- ✅ Безопасность и аудит
+
+### Дальнейшее развитие:
+
+**Книги:**
+- PostgreSQL: Up and Running (Regina Obe, Leo Hsu)
+- PostgreSQL High Performance (Gregory Smith)
+- Mastering PostgreSQL (Hans-Jürgen Schönig)
+
+**Онлайн ресурсы:**
+- Официальная документация: https://www.postgresql.org/docs/
+- PostgreSQL Tutorial: https://www.postgresqltutorial.com/
+- Use The Index, Luke: https://use-the-index-luke.com/
+
+**Практика:**
+- Участвуйте в PostgreSQL сообществе
+- Решайте задачи на SQL на LeetCode, HackerRank
+- Внедряйте PostgreSQL в свои проекты
+- Экспериментируйте с расширениями (PostGIS, TimescaleDB, pg_partman)
+
+**Сертификация:**
+- PostgreSQL 12 Associate Certification (EnterpriseDB)
+
+### Следующие шаги:
+
+1. **Закрепление:** Повторите все модули через неделю
+2. **Проект:** Создайте реальный проект с PostgreSQL
+3. **Автоматизация:** Напишите скрипты для регулярного обслуживания
+4. **Мониторинг:** Настройте полноценный мониторинг PostgreSQL
+5. **Репликация:** Изучите streaming replication и logical replication
+6. **Расширения:** Изучите популярные расширения PostgreSQL
+
+### Чек-лист PostgreSQL DBA:
+
+**Ежедневно:**
+- [ ] Проверка логов на ошибки
+- [ ] Мониторинг активных соединений
+- [ ] Проверка долгих запросов
+- [ ] Проверка места на диске
+
+**Еженедельно:**
+- [ ] Анализ медленных запросов
+- [ ] Проверка bloat в таблицах
+- [ ] Проверка неиспользуемых индексов
+- [ ] Тестирование резервных копий
+
+**Ежемесячно:**
+- [ ] Обновление статистики (ANALYZE)
+- [ ] Проверка настроек производительности
+- [ ] Аудит прав доступа
+- [ ] Планирование capacity
+
+**Полугодовая проверка:**
+- [ ] Обзор версий PostgreSQL (планирование обновления)
+- [ ] Пересмотр архитектуры БД
+- [ ] Disaster Recovery тестирование
+- [ ] Обучение команды новым фичам
+
+---
+
+## 🎉 Поздравляем!
+
+Вы прошли интенсивный курс по PostgreSQL и теперь обладаете навыками для эффективной работы с одной из самых мощных СУБД. Продолжайте практиковаться и углублять свои знания!

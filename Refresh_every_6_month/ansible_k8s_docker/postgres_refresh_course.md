@@ -1312,7 +1312,7 @@ SELECT count(*) FROM pg_stat_activity;
 ### 🚀 Бонус (новое)
 
 - Создай функцию для безопасного перевода денег:
-  ```sql
+```sql
   CREATE OR REPLACE FUNCTION transfer_money(
       from_account INTEGER,
       to_account INTEGER,

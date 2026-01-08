@@ -1012,16 +1012,6 @@ SELECT
     salary,
     path
 FROM employee_hierarchy
-ORDER
-```
-
-Continue
-
-15 нояб.
-
-sql
-
-```sql
 ORDER BY path;
 
 -- Рекурсивный CTE для чисел Fibonacci
@@ -1918,15 +1908,6 @@ CREATE TABLE sales_south PARTITION OF sales_by_region
     FOR VALUES IN ('South', 'Southeast');
 
 CREATE TABLE sales_west PARTITION OF sales_by_region
-```
-
-Continue
-
-15 нояб.
-
-sql
-
-```sql
     FOR VALUES IN ('West', 'Northwest');
 
 CREATE TABLE sales_east PARTITION OF sales_by_region
@@ -2811,15 +2792,7 @@ pg_dumpall -U postgres --globals-only -f globals.sql
 # ВОССТАНОВЛЕНИЕ из dump
 
 # Восстановление custom
-```
 
-Continue
-
-16 нояб.
-
-bash
-
-```bash
 # Восстановление custom format
 pg_restore -U postgres -d mydb -v mydb_backup.dump
 
@@ -3652,16 +3625,6 @@ CREATE TABLE products (
 -- Индекс для fuzzy поиска
 CREATE INDEX idx_products_name_trgm ON products USING GIN (name gin_trgm_ops);
 
--- Пои
-```
-
-Continue
-
-16 нояб.
-
-sql
-
-```sql
 -- Поиск по сходству
 SELECT name, similarity(name, 'PostgreSQL') AS sim
 FROM products
@@ -4553,16 +4516,6 @@ CREATE INDEX idx_users_created_at ON users(created_at DESC);
 -- 3. Адреса доставки
 CREATE TABLE addresses (
     id BIGSERIAL PRIMARY KEY,
-    user_id BIGINT REFERENCES users(
-```
-
-Continue
-
-16 нояб.
-
-sql
-
-```sql
     user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
     address_type VARCHAR(20) CHECK (address_type IN ('shipping', 'billing')),
     street VARCHAR(255) NOT NULL,

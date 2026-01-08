@@ -1281,9 +1281,15 @@ sudo systemctl start nftables
 
 
 # Типы записей DNS
-
-A # IPv4 адрес AAAA # IPv6 адрес CNAME # Canonical name (алиас) MX # Mail exchange NS # Name server TXT # Text record PTR # Pointer (обратное разрешение) SOA # Start of authority SRV # Service record
-
+A      # IPv4 адрес
+AAAA   # IPv6 адрес
+CNAME  # Canonical Name (алиас)
+MX     # Mail Exchange
+NS     # Name Server
+TXT    # Text record (SPF, DKIM, verification)
+PTR    # Pointer (reverse DNS)
+SOA    # Start of Authority
+SRV    # Service record
 ````
 
 **DNS разрешение:**

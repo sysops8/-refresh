@@ -1149,7 +1149,7 @@ ara playbook show <id>
 # Web интерфейс
 ara-manage runserver
 # Открой http://localhost:8000
-```
+````
 
 ---
 

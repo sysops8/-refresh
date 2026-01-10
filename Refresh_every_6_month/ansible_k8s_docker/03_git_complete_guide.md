@@ -116,6 +116,8 @@ git reset HEAD hello.txt
 git restore --staged hello.txt
 
 # 3. Изменить последний коммит
+# Очень полезная команда, которая позволяет исправить последний коммит.
+# Она не создает новый коммит, а изменяет существующий.
 git commit -m "Wrong message"
 echo "Fix" >> hello.txt
 git add hello.txt

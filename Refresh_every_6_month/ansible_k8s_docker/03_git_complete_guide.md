@@ -126,6 +126,7 @@ git log --oneline
 git revert <commit-hash>
 # или лучше checkout потому-что при revert возникают конфликты
 # git checkout <hash-коммита> -- hello.txt
+# git commit -m "Restore <file> to state from <commit-hash>"
 
 # 5. Жесткий откат (ОПАСНО - удаляет изменения)
 git reset --hard HEAD~1  # откатить на 1 коммит назад

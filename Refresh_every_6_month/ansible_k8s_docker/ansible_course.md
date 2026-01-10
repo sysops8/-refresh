@@ -1244,15 +1244,9 @@ yaml
     - name: Include nginx with vars
       include_role:
         name: nginx
-        vars_from: production
-```
-
-Продолжи курс
-
-28 дек. 2025 г.
-
-.yml vars: http_port: 8080 when: install_nginx
-
+        vars_from: production.yml vars:
+		http_port: 8080
+		when: install_nginx
 ```
 - name: Import role statically
   import_role:

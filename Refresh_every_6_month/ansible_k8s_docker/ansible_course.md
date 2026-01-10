@@ -73,10 +73,10 @@ pip install ansible
 # Проверка
 ansible --version
 ansible localhost -m ping
-```
+````
 
 **Базовая структура проекта:**
-```
+````
 ansible-project/
 ├── ansible.cfg           # Конфигурация Ansible
 ├── inventory/

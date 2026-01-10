@@ -1231,7 +1231,6 @@ yaml
 yaml
 
 ```yaml
----
 - name: Configure servers
   hosts: all
   become: yes
@@ -1247,7 +1246,6 @@ yaml
         vars_from: production.yml vars:
 		http_port: 8080
 		when: install_nginx
-```
 - name: Import role statically
   import_role:
     name: security

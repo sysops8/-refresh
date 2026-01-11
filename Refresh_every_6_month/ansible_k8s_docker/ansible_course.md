@@ -1130,7 +1130,7 @@ EOF
 
 bash
 
-````bash
+```bash
 # Установи ara (Ansible Run Analysis)
 pip install ara
 

@@ -931,9 +931,6 @@ docker logs -f <container>
 docker logs --tail 100 <container>
 docker logs --since 1h <container>
 
-# Продолжение курса: Модуль 4 - Логирование
-
-```bash
 # Традиционные логи
 tail -f /var/log/syslog
 tail -f /var/log/nginx/access.log

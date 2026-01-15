@@ -12380,4 +12380,3251 @@ EOF
 chmod +x backup_alertmanager.sh
 ```
 
+
+## 💻 Задание 3: Log Aggregation & Analysis (ELK/Loki)
+
+```bash
+cat > backup_log_aggregation.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+LOKI_CONFIG="/etc/loki/config.yml"
+PROMTAIL_CONFIG="/etc/promtail/config.yml"
+LOG_DIR="/var/log/backup-logs"
+LOKI_DATA_DIR="/var/lib/loki"
+PROMTAIL_POSITIONS="/var/lib/promtail/positions.yaml"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_DIR/log_aggregation.log"
+}
+
+# Initialize log aggregation stack
+init_log_aggregation() {
+    log "Initializing log aggregation stack (Loki + Promtail)..."
+    
+    # Create directories
+    mkdir -p "$LOG_DIR"
+    mkdir -p "$LOKI_DATA_DIR"
+    mkdir -p "$(dirname "$PROMTAIL_POSITIONS")"
+    mkdir -p "$(dirname "$LOKI_CONFIG")"
+    mkdir -p "$(dirname "$PROMTAIL_CONFIG")"
+    
+    # Install Loki
+    install_loki
+    
+    # Install Promtail
+    install_promtail
+    
+    # Configure Loki
+    configure_loki
+    
+    # Configure Promtail
+    configure_promtail
+    
+    # Create systemd services
+    create_loki_service
+    create_promtail_service
+    
+    log "Log aggregation stack initialized"
+}
+
+# Install Loki
+install_loki() {
+    if command -v loki &>/dev/null; then
+        log "Loki already installed"
+        return 0
+    fi
+    
+    log "Installing Loki..."
+    
+    local version="2.9.3"
+    local arch="amd64"
+    
+    wget "https://github.com/grafana/loki/releases/download/v${version}/loki-linux-${arch}.zip"
+    unzip "loki-linux-${arch}.zip"
+    sudo mv loki-linux-${arch} /usr/local/bin/loki
+    sudo chmod +x /usr/local/bin/loki
+    rm -f "loki-linux-${arch}.zip"
+    
+    log "Loki installed successfully"
+}
+
+# Install Promtail
+install_promtail() {
+    if command -v promtail &>/dev/null; then
+        log "Promtail already installed"
+        return 0
+    fi
+    
+    log "Installing Promtail..."
+    
+    local version="2.9.3"
+    local arch="amd64"
+    
+    wget "https://github.com/grafana/loki/releases/download/v${version}/promtail-linux-${arch}.zip"
+    unzip "promtail-linux-${arch}.zip"
+    sudo mv promtail-linux-${arch} /usr/local/bin/promtail
+    sudo chmod +x /usr/local/bin/promtail
+    rm -f "promtail-linux-${arch}.zip"
+    
+    log "Promtail installed successfully"
+}
+
+# Configure Loki
+configure_loki() {
+    log "Configuring Loki..."
+    
+    cat > "$LOKI_CONFIG" <<'LOKICONFIG'
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: info
+
+common:
+  path_prefix: /var/lib/loki
+  storage:
+    filesystem:
+      chunks_directory: /var/lib/loki/chunks
+      rules_directory: /var/lib/loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: boltdb-shipper
+      object_store: filesystem
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /var/lib/loki/boltdb-shipper-active
+    cache_location: /var/lib/loki/boltdb-shipper-cache
+    cache_ttl: 24h
+    shared_store: filesystem
+  filesystem:
+    directory: /var/lib/loki/chunks
+
+compactor:
+  working_directory: /var/lib/loki/boltdb-shipper-compactor
+  shared_store: filesystem
+
+limits_config:
+  retention_period: 744h  # 31 days
+  reject_old_samples: true
+  reject_old_samples_max_age: 168h
+  ingestion_rate_mb: 10
+  ingestion_burst_size_mb: 20
+  max_query_length: 0h
+  max_query_parallelism: 32
+
+chunk_store_config:
+  max_look_back_period: 744h
+
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 744h
+
+query_range:
+  results_cache:
+    cache:
+      embedded_cache:
+        enabled: true
+        max_size_mb: 100
+
+ruler:
+  alertmanager_url: http://localhost:9093
+  ring:
+    kvstore:
+      store: inmemory
+  rule_path: /var/lib/loki/rules-temp
+  storage:
+    type: local
+    local:
+      directory: /var/lib/loki/rules
+  enable_api: true
+  enable_alertmanager_v2: true
+LOKICONFIG
+    
+    log "Loki configuration created: $LOKI_CONFIG"
+}
+
+# Configure Promtail
+configure_promtail() {
+    log "Configuring Promtail..."
+    
+    cat > "$PROMTAIL_CONFIG" <<'PROMTAILCONFIG'
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: info
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+  # Backup job logs
+  - job_name: backup_jobs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: backup_jobs
+          __path__: /var/log/backup*.log
+    pipeline_stages:
+      # Parse timestamp
+      - regex:
+          expression: '^\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
+      
+      # Extract log level
+      - regex:
+          expression: '\[(?P<level>INFO|WARNING|ERROR|CRITICAL)\]'
+      - labels:
+          level:
+      
+      # Extract job name
+      - regex:
+          expression: 'job[=:](?P<job_name>[\w-]+)'
+      - labels:
+          job_name:
+      
+      # Extract backup type
+      - regex:
+          expression: 'type[=:](?P<backup_type>full|incremental|differential)'
+      - labels:
+          backup_type:
+  
+  # MySQL backup logs
+  - job_name: mysql_backups
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: mysql_backups
+          application: mysql
+          __path__: /var/log/mysql_backup*.log
+    pipeline_stages:
+      - regex:
+          expression: '^\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
+      - regex:
+          expression: '\[(?P<level>INFO|WARNING|ERROR)\]'
+      - labels:
+          level:
+  
+  # PostgreSQL backup logs
+  - job_name: postgresql_backups
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: postgresql_backups
+          application: postgresql
+          __path__: /var/log/pg_backup*.log
+    pipeline_stages:
+      - regex:
+          expression: '^\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
+      - regex:
+          expression: '\[(?P<level>INFO|WARNING|ERROR)\]'
+      - labels:
+          level:
+  
+  # Recovery operation logs
+  - job_name: recovery_operations
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: recovery
+          __path__: /var/log/recovery*.log
+    pipeline_stages:
+      - regex:
+          expression: '^\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
+      - regex:
+          expression: '\[(?P<level>INFO|WARNING|ERROR|SUCCESS)\]'
+      - labels:
+          level:
+      - regex:
+          expression: 'scenario[=:](?P<scenario>[\w-]+)'
+      - labels:
+          scenario:
+  
+  # System logs (syslog)
+  - job_name: syslog
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          __path__: /var/log/syslog
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\w+\s+\d+\s+\d{2}:\d{2}:\d{2})\s+(?P<hostname>[\w-]+)\s+(?P<program>[\w-]+)(\[(?P<pid>\d+)\])?:'
+      - labels:
+          program:
+          hostname:
+      - match:
+          selector: '{program="backup"}'
+          stages:
+            - regex:
+                expression: 'backup.*(?P<status>success|failed)'
+            - labels:
+                status:
+  
+  # Parallel backup logs
+  - job_name: parallel_backups
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: parallel_backups
+          __path__: /var/log/parallel-backup/*.log
+    pipeline_stages:
+      - regex:
+          expression: '^\[(?P<timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]'
+      - timestamp:
+          source: timestamp
+          format: '2006-01-02 15:04:05'
+      - regex:
+          expression: 'job_id[=:](?P<job_id>[\w-]+)'
+      - labels:
+          job_id:
+  
+  # Network backup logs
+  - job_name: network_backups
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: network_backups
+          __path__: /var/log/network_backup*.log
+    pipeline_stages:
+      - regex:
+          expression: 'throughput[=:](?P<throughput>\d+\.?\d*)\s*(?P<unit>MB/s|Mbps)'
+      - labels:
+          unit:
+PROMTAILCONFIG
+    
+    log "Promtail configuration created: $PROMTAIL_CONFIG"
+}
+
+# Create Loki systemd service
+create_loki_service() {
+    log "Creating Loki systemd service..."
+    
+    cat > /etc/systemd/system/loki.service <<SERVICE
+[Unit]
+Description=Loki Log Aggregation System
+After=network.target
+
+[Service]
+Type=simple
+User=loki
+ExecStart=/usr/local/bin/loki -config.file=$LOKI_CONFIG
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+    
+    # Create loki user
+    useradd -r -s /bin/false loki 2>/dev/null || true
+    chown -R loki:loki "$LOKI_DATA_DIR"
+    
+    systemctl daemon-reload
+    systemctl enable loki
+    
+    log "Loki service created"
+}
+
+# Create Promtail systemd service
+create_promtail_service() {
+    log "Creating Promtail systemd service..."
+    
+    cat > /etc/systemd/system/promtail.service <<SERVICE
+[Unit]
+Description=Promtail Log Shipper
+After=network.target loki.service
+
+[Service]
+Type=simple
+User=promtail
+ExecStart=/usr/local/bin/promtail -config.file=$PROMTAIL_CONFIG
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+SERVICE
+    
+    # Create promtail user
+    useradd -r -s /bin/false promtail 2>/dev/null || true
+    chown -R promtail:promtail "$(dirname "$PROMTAIL_POSITIONS")"
+    
+    # Add promtail to adm group to read logs
+    usermod -a -G adm promtail 2>/dev/null || true
+    
+    systemctl daemon-reload
+    systemctl enable promtail
+    
+    log "Promtail service created"
+}
+
+# Query logs with LogQL
+query_logs() {
+    local query="$1"
+    local limit="${2:-100}"
+    local since="${3:-1h}"
+    
+    if [ -z "$query" ]; then
+        echo "Usage: $0 query '<LogQL_query>' [limit] [time_range]"
+        echo ""
+        echo "Examples:"
+        echo "  $0 query '{job=\"backup_jobs\"}' 50 2h"
+        echo "  $0 query '{level=\"ERROR\"}' 100 24h"
+        echo "  $0 query '{job=\"mysql_backups\"} |= \"failed\"' 20 12h"
+        return 1
+    fi
+    
+    log "Querying logs: $query"
+    
+    local end_time=$(date +%s)000000000  # nanoseconds
+    local start_time=$(date -d "-$since" +%s)000000000
+    
+    curl -s "http://localhost:3100/loki/api/v1/query_range" \
+        --data-urlencode "query=$query" \
+        --data-urlencode "limit=$limit" \
+        --data-urlencode "start=$start_time" \
+        --data-urlencode "end=$end_time" \
+        | jq -r '.data.result[] | .values[] | .[1]' | head -n "$limit"
+}
+
+# Analyze backup failures
+analyze_failures() {
+    local time_range="${1:-24h}"
+    
+    log "Analyzing backup failures in last $time_range..."
+    
+    echo ""
+    echo "=== Backup Failures Analysis ==="
+    echo ""
+    
+    # Query failed backups
+    local query='{job=~".*backup.*"} |~ "(?i)(failed|error)"'
+    
+    echo "Recent Failures:"
+    query_logs "$query" 50 "$time_range" | while read line; do
+        echo "  - $line"
+    done
+    
+    echo ""
+    echo "Failure Breakdown by Job:"
+    
+    # Count failures per job
+    curl -s "http://localhost:3100/loki/api/v1/query" \
+        --data-urlencode 'query=sum by (job) (count_over_time({job=~".*backup.*"} |~ "(?i)failed" [24h]))' \
+        | jq -r '.data.result[] | "\(.metric.job): \(.value[1])"'
+    
+    echo ""
+    echo "Most Common Error Messages:"
+    
+    query_logs '{level="ERROR"}' 100 "$time_range" | \
+        grep -oE 'ERROR:.*' | \
+        sort | uniq -c | sort -rn | head -10
+}
+
+# Generate log analysis report
+generate_log_report() {
+    local report_file="/var/log/log_analysis_report_$(date +%Y%m%d).html"
+    
+    log "Generating log analysis report..."
+    
+    cat > "$report_file" <<'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backup Log Analysis Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #1e3c72;
+            border-bottom: 3px solid #2a5298;
+            padding-bottom: 10px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .metric-card.error {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+        .metric-card.warning {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+        .metric-value {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .metric-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .log-viewer {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 20px 0;
+        }
+        .log-error { color: #ff6b6b; }
+        .log-warning { color: #ffd93d; }
+        .log-info { color: #6bcf7f; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Backup Log Analysis Report</h1>
+        <p><strong>Generated:</strong> $(date)</p>
+        <p><strong>Analysis Period:</strong> Last 24 hours</p>
+        
+        <div class="metrics-grid">
+HTML
+    
+    # Query log statistics
+    local total_logs=$(curl -s "http://localhost:3100/loki/api/v1/query" \
+        --data-urlencode 'query=count_over_time({job=~".*backup.*"}[24h])' \
+        | jq -r '.data.result[0].value[1]' 2>/dev/null || echo "0")
+    
+    local error_count=$(curl -s "http://localhost:3100/loki/api/v1/query" \
+        --data-urlencode 'query=count_over_time({job=~".*backup.*", level="ERROR"}[24h])' \
+        | jq -r '.data.result[0].value[1]' 2>/dev/null || echo "0")
+    
+    local warning_count=$(curl -s "http://localhost:3100/loki/api/v1/query" \
+        --data-urlencode 'query=count_over_time({job=~".*backup.*", level="WARNING"}[24h])' \
+        | jq -r '.data.result[0].value[1]' 2>/dev/null || echo "0")
+    
+    local success_count=$(curl -s "http://localhost:3100/loki/api/v1/query" \
+        --data-urlencode 'query=count_over_time({job=~".*backup.*"} |~ "(?i)success" [24h])' \
+        | jq -r '.data.result[0].value[1]' 2>/dev/null || echo "0")
+    
+    cat >> "$report_file" <<HTML
+            <div class="metric-card">
+                <div class="metric-label">Total Log Entries</div>
+                <div class="metric-value">$total_logs</div>
+            </div>
+            <div class="metric-card error">
+                <div class="metric-label">Errors</div>
+                <div class="metric-value">$error_count</div>
+            </div>
+            <div class="metric-card warning">
+                <div class="metric-label">Warnings</div>
+                <div class="metric-value">$warning_count</div>
+            </div>
+            <div class="metric-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                <div class="metric-label">Successful Backups</div>
+                <div class="metric-value">$success_count</div>
+            </div>
+        </div>
+        
+        <h2>Error Analysis</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Job</th>
+                    <th>Error Count</th>
+                    <th>Last Error</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+HTML
+    
+    # Add error breakdown
+    curl -s "http://localhost:3100/loki/api/v1/query" \
+        --data-urlencode 'query=sum by (job) (count_over_time({job=~".*backup.*", level="ERROR"}[24h]))' \
+        | jq -r '.data.result[] | 
+            "<tr><td>\(.metric.job)</td><td>\(.value[1])</td><td>Recent</td><td>Needs attention</td></tr>"' \
+        >> "$report_file" 2>/dev/null || true
+    
+    cat >> "$report_file" <<HTML
+            </tbody>
+        </table>
+        
+        <h2>Recent Error Logs</h2>
+        <div class="log-viewer">
+HTML
+    
+    # Add recent errors
+    query_logs '{level="ERROR"}' 20 24h | while read line; do
+        echo "<div class=\"log-error\">$line</div>" >> "$report_file"
+    done
+    
+    cat >> "$report_file" <<HTML
+        </div>
+        
+        <h2>Log Volume by Job</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Job</th>
+                    <th>Log Entries (24h)</th>
+                    <th>Avg Entry Size</th>
+                    <th>Trend</th>
+                </tr>
+            </thead>
+            <tbody>
+HTML
+    
+    # Add log volume by job
+    curl -s "http://localhost:3100/loki/api/v1/query" \
+        --data-urlencode 'query=sum by (job) (count_over_time({job=~".*backup.*"}[24h]))' \
+        | jq -r '.data.result[] | 
+            "<tr><td>\(.metric.job)</td><td>\(.value[1])</td><td>~500B</td><td>Stable</td></tr>"' \
+        >> "$report_file" 2>/dev/null || true
+    
+    cat >> "$report_file" <<HTML
+            </tbody>
+        </table>
+        
+        <h2>Common Issues Detected</h2>
+        <ul>
+HTML
+    
+    if [ "$error_count" -gt 10 ]; then
+        cat >> "$report_file" <<HTML
+            <li><strong>High Error Rate:</strong> $error_count errors in last 24h - investigation recommended</li>
+HTML
+    fi
+    
+    cat >> "$report_file" <<HTML
+            <li>Check disk space if backup duration is increasing</li>
+            <li>Review network connectivity if remote backups are failing</li>
+            <li>Verify database connectivity for DB backup jobs</li>
+        </ul>
+        
+        <h2>Recommendations</h2>
+        <ul>
+            <li>Set up alert rules for error rate > 10/hour</li>
+            <li>Implement log rotation to manage storage</li>
+            <li>Add structured logging for better analysis</li>
+            <li>Create dashboards in Grafana for real-time monitoring</li>
+            <li>Schedule weekly log review meetings</li>
+        </ul>
+        
+        <h2>Log Retention Policy</h2>
+        <p>Current retention: <strong>31 days</strong></p>
+        <p>Adjust in Loki configuration: <code>$LOKI_CONFIG</code></p>
+        
+        <hr>
+        <p style="text-align: center; color: #666;">
+            Log Analysis Report v1.0 | Powered by Loki + Promtail
+        </p>
+    </div>
+</body>
+</html>
+HTML
+    
+    log "Log analysis report generated: $report_file"
+    echo "$report_file"
+}
+
+# Create Loki alert rules
+create_loki_alert_rules() {
+    local rules_file="$LOKI_DATA_DIR/rules/backup-logs.yml"
+    
+    log "Creating Loki alert rules..."
+    
+    mkdir -p "$(dirname "$rules_file")"
+    
+    cat > "$rules_file" <<'RULES'
+groups:
+  - name: backup_log_alerts
+    interval: 1m
+    rules:
+      - alert: HighBackupErrorRate
+        expr: |
+          sum(rate({job=~".*backup.*", level="ERROR"}[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: logs
+        annotations:
+          summary: "High error rate in backup logs"
+          description: "Error rate: {{ $value }} errors/sec"
+      
+      - alert: BackupLogErrors
+        expr: |
+          count_over_time({job=~".*backup.*"} |~ "(?i)(failed|error|critical)" [5m]) > 10
+        for: 2m
+        labels:
+          severity: critical
+          component: logs
+        annotations:
+          summary: "Multiple backup errors detected"
+          description: "{{ $value }} error messages in 5 minutes"
+      
+      - alert: NoBackupLogsReceived
+        expr: |
+          absent_over_time({job=~".*backup.*"}[15m])
+        for: 5m
+        labels:
+          severity: warning
+          component: logs
+        annotations:
+          summary: "No backup logs received"
+          description: "No logs from backup jobs in 15 minutes"
+RULES
+    
+    log "Loki alert rules created: $rules_file"
+}
+
+# Test log ingestion
+test_log_ingestion() {
+    log "Testing log ingestion..."
+    
+    # Generate test log entries
+    local test_log="/tmp/test_backup.log"
+    
+    cat > "$test_log" <<TESTLOG
+[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Starting test backup job=test-backup
+[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Backup type=full size=1024MB
+[$(date +'%Y-%m-%d %H:%M:%S')] [WARNING] Slow network detected throughput=50MB/s
+[$(date +'%Y-%m-%d %H:%M:%S')] [INFO] Backup completed successfully duration=300s
+TESTLOG
+    
+    # Wait for Promtail to pick up logs
+    sleep 5
+    
+    # Query for test logs
+    log "Querying test logs..."
+    local result=$(query_logs '{job="backup_jobs"} |= "test-backup"' 10 5m)
+    
+    if [ -n "$result" ]; then
+        log "✓ Log ingestion working correctly"
+        echo "$result"
+    else
+        log "✗ Log ingestion test failed"
+        return 1
+    fi
+    
+    rm -f "$test_log"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_log_aggregation
+        ;;
+    
+    start)
+        log "Starting log aggregation services..."
+        systemctl start loki
+        systemctl start promtail
+        systemctl status loki --no-pager
+        systemctl status promtail --no-pager
+        ;;
+    
+    stop)
+        log "Stopping log aggregation services..."
+        systemctl stop promtail
+        systemctl stop loki
+        ;;
+    
+    restart)
+        log "Restarting log aggregation services..."
+        systemctl restart loki
+        systemctl restart promtail
+        ;;
+    
+    query)
+        query_logs "$2" "$3" "$4"
+        ;;
+    
+    analyze)
+        analyze_failures "$2"
+        ;;
+    
+    report)
+        generate_log_report
+        ;;
+    
+    rules)
+        create_loki_alert_rules
+        ;;
+    
+    test)
+        test_log_ingestion
+        ;;
+    
+    *)
+        cat <<HELP
+Backup Log Aggregation (Loki + Promtail)
+
+Usage: $0 <command> [options]
+
+Commands:
+  init                        - Initialize log aggregation stack
+  start                       - Start Loki and Promtail services
+  stop                        - Stop services
+  restart                     - Restart services
+  query '<LogQL>' [lim] [time]- Query logs with LogQL
+  analyze [time_range]        - Analyze backup failures
+  report                      - Generate log analysis report
+  rules                       - Create Loki alert rules
+  test                        - Test log ingestion
+
+Examples:
+  $0 init
+  $0 start
+  $0 query '{job="mysql_backups"}' 50 2h
+  $0 query '{level="ERROR"}' 100 24h
+  $0 analyze 24h
+  $0 report
+
+Loki API: http://localhost:3100
+Promtail: http://localhost:9080
+
+LogQL Examples:
+  {job="backup_jobs"}
+  {job="mysql_backups", level="ERROR"}
+  {job=~".*backup.*"} |= "failed"
+  {job="backup_jobs"} |~ "(?i)error"
+HELP
+        ;;
+esac
+EOF
+
+chmod +x backup_log_aggregation.sh
+```
+
 Продолжить с остальными частями модуля 8?
+
+- Backup Analytics & Predictive Analysis
+- Capacity Planning
+
+
+## 💻 Задание 4: Backup Analytics & Predictive Analysis
+
+```bash
+cat > backup_analytics.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+ANALYTICS_DB="/var/lib/backup-analytics/analytics.db"
+ANALYTICS_LOG="/var/log/backup_analytics.log"
+PREDICTIONS_DIR="/var/lib/backup-analytics/predictions"
+REPORTS_DIR="/var/www/html/analytics"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$ANALYTICS_LOG"
+}
+
+# Initialize analytics database
+init_analytics() {
+    log "Initializing backup analytics system..."
+    
+    mkdir -p "$(dirname "$ANALYTICS_DB")"
+    mkdir -p "$PREDICTIONS_DIR"
+    mkdir -p "$REPORTS_DIR"
+    
+    # Create SQLite database
+    sqlite3 "$ANALYTICS_DB" <<'SQL'
+-- Backup job history
+CREATE TABLE IF NOT EXISTS backup_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    job_name TEXT NOT NULL,
+    job_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    duration_seconds INTEGER,
+    size_bytes INTEGER,
+    compression_ratio REAL,
+    dedup_ratio REAL,
+    throughput_mbps REAL,
+    cpu_usage_percent REAL,
+    memory_usage_mb INTEGER,
+    error_message TEXT
+);
+
+-- Storage metrics
+CREATE TABLE IF NOT EXISTS storage_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    mount_point TEXT NOT NULL,
+    total_bytes INTEGER,
+    used_bytes INTEGER,
+    available_bytes INTEGER,
+    utilization_percent REAL,
+    inode_utilization_percent REAL
+);
+
+-- Performance trends
+CREATE TABLE IF NOT EXISTS performance_trends (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    job_name TEXT NOT NULL,
+    avg_duration_seconds REAL,
+    avg_size_bytes INTEGER,
+    avg_throughput_mbps REAL,
+    success_rate REAL,
+    trend_direction TEXT
+);
+
+-- Capacity predictions
+CREATE TABLE IF NOT EXISTS capacity_predictions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    mount_point TEXT NOT NULL,
+    current_used_gb REAL,
+    predicted_used_gb REAL,
+    prediction_date DATE,
+    growth_rate_percent REAL,
+    days_until_full INTEGER,
+    confidence_level REAL
+);
+
+-- Cost analysis
+CREATE TABLE IF NOT EXISTS cost_analysis (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+    storage_tier TEXT NOT NULL,
+    total_gb REAL,
+    cost_per_gb REAL,
+    monthly_cost REAL,
+    annual_cost REAL
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_backup_timestamp ON backup_history(timestamp);
+CREATE INDEX IF NOT EXISTS idx_backup_job ON backup_history(job_name);
+CREATE INDEX IF NOT EXISTS idx_storage_timestamp ON storage_metrics(timestamp);
+CREATE INDEX IF NOT EXISTS idx_storage_mount ON storage_metrics(mount_point);
+SQL
+    
+    log "Analytics database initialized: $ANALYTICS_DB"
+}
+
+# Collect backup metrics
+collect_backup_metrics() {
+    log "Collecting backup metrics..."
+    
+    # Parse recent backup logs
+    for log_file in /var/log/backup*.log; do
+        if [ ! -f "$log_file" ]; then
+            continue
+        fi
+        
+        # Extract job name
+        local job_name=$(basename "$log_file" .log | sed 's/backup_//')
+        
+        # Parse last backup
+        local status="unknown"
+        local duration=0
+        local size=0
+        
+        if grep -q "completed successfully" "$log_file"; then
+            status="success"
+        elif grep -q "failed\|error" "$log_file"; then
+            status="failed"
+        fi
+        
+        # Extract duration
+        duration=$(grep "completed in" "$log_file" | tail -1 | grep -o '[0-9]*s' | tr -d 's' || echo "0")
+        
+        # Extract size
+        size=$(grep "size:" "$log_file" | tail -1 | grep -o '[0-9]*' | head -1 || echo "0")
+        
+        # Insert into database
+        sqlite3 "$ANALYTICS_DB" <<SQL
+INSERT INTO backup_history (job_name, job_type, status, duration_seconds, size_bytes)
+VALUES ('$job_name', 'full', '$status', $duration, $size);
+SQL
+    done
+    
+    log "Backup metrics collected"
+}
+
+# Collect storage metrics
+collect_storage_metrics() {
+    log "Collecting storage metrics..."
+    
+    # Get storage stats for backup mounts
+    for mount in /backup /backup/mysql /backup/postgresql; do
+        if [ ! -d "$mount" ]; then
+            continue
+        fi
+        
+        local df_output=$(df -B1 "$mount" | tail -1)
+        local total=$(echo "$df_output" | awk '{print $2}')
+        local used=$(echo "$df_output" | awk '{print $3}')
+        local available=$(echo "$df_output" | awk '{print $4}')
+        local utilization=$(echo "$df_output" | awk '{print $5}' | tr -d '%')
+        
+        # Get inode usage
+        local inode_util=$(df -i "$mount" | tail -1 | awk '{print $5}' | tr -d '%')
+        
+        sqlite3 "$ANALYTICS_DB" <<SQL
+INSERT INTO storage_metrics (mount_point, total_bytes, used_bytes, available_bytes, utilization_percent, inode_utilization_percent)
+VALUES ('$mount', $total, $used, $available, $utilization, $inode_util);
+SQL
+    done
+    
+    log "Storage metrics collected"
+}
+
+# Calculate performance trends
+calculate_trends() {
+    log "Calculating performance trends..."
+    
+    sqlite3 "$ANALYTICS_DB" <<'SQL'
+INSERT INTO performance_trends (job_name, avg_duration_seconds, avg_size_bytes, avg_throughput_mbps, success_rate, trend_direction)
+SELECT 
+    job_name,
+    AVG(duration_seconds) as avg_duration,
+    AVG(size_bytes) as avg_size,
+    AVG(throughput_mbps) as avg_throughput,
+    (SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)) as success_rate,
+    CASE 
+        WHEN AVG(duration_seconds) > (SELECT AVG(duration_seconds) FROM backup_history WHERE job_name=bh.job_name AND timestamp < datetime('now', '-7 days')) THEN 'increasing'
+        WHEN AVG(duration_seconds) < (SELECT AVG(duration_seconds) FROM backup_history WHERE job_name=bh.job_name AND timestamp < datetime('now', '-7 days')) THEN 'decreasing'
+        ELSE 'stable'
+    END as trend
+FROM backup_history bh
+WHERE timestamp >= datetime('now', '-7 days')
+GROUP BY job_name;
+SQL
+    
+    log "Performance trends calculated"
+}
+
+# Predictive capacity planning
+predict_capacity() {
+    local mount_point="${1:-/backup}"
+    
+    log "Running capacity prediction for: $mount_point"
+    
+    # Get historical storage data
+    local history=$(sqlite3 "$ANALYTICS_DB" <<SQL
+SELECT timestamp, used_bytes 
+FROM storage_metrics 
+WHERE mount_point='$mount_point' 
+AND timestamp >= datetime('now', '-30 days')
+ORDER BY timestamp;
+SQL
+)
+    
+    if [ -z "$history" ]; then
+        log "No historical data available for capacity prediction"
+        return 1
+    fi
+    
+    # Calculate growth rate using linear regression
+    local temp_data="/tmp/capacity_data_$$"
+    echo "$history" | awk -F'|' '{print NR, $2}' > "$temp_data"
+    
+    # Simple linear regression in bash (y = mx + b)
+    local n=$(wc -l < "$temp_data")
+    local sum_x=$(awk '{sum+=$1} END {print sum}' "$temp_data")
+    local sum_y=$(awk '{sum+=$2} END {print sum}' "$temp_data")
+    local sum_xy=$(awk '{sum+=$1*$2} END {print sum}' "$temp_data")
+    local sum_x2=$(awk '{sum+=$1*$1} END {print sum}' "$temp_data")
+    
+    # Calculate slope (growth rate)
+    local slope=$(echo "scale=10; ($n * $sum_xy - $sum_x * $sum_y) / ($n * $sum_x2 - $sum_x * $sum_x)" | bc)
+    local intercept=$(echo "scale=10; ($sum_y - $slope * $sum_x) / $n" | bc)
+    
+    # Get current and total storage
+    local current_used=$(sqlite3 "$ANALYTICS_DB" "SELECT used_bytes FROM storage_metrics WHERE mount_point='$mount_point' ORDER BY timestamp DESC LIMIT 1;")
+    local total_capacity=$(sqlite3 "$ANALYTICS_DB" "SELECT total_bytes FROM storage_metrics WHERE mount_point='$mount_point' ORDER BY timestamp DESC LIMIT 1;")
+    
+    # Predict when storage will be full
+    local days_until_full=0
+    if (( $(echo "$slope > 0" | bc -l) )); then
+        days_until_full=$(echo "scale=0; ($total_capacity - $current_used) / ($slope * 86400)" | bc)
+    else
+        days_until_full=999999  # Never
+    fi
+    
+    # Calculate predictions for 30, 60, 90 days
+    local predictions=""
+    for days in 30 60 90; do
+        local predicted_bytes=$(echo "scale=0; $current_used + ($slope * $days * 86400)" | bc)
+        local predicted_gb=$(echo "scale=2; $predicted_bytes / 1024 / 1024 / 1024" | bc)
+        local current_gb=$(echo "scale=2; $current_used / 1024 / 1024 / 1024" | bc)
+        local growth_rate=$(echo "scale=2; (($predicted_bytes - $current_used) * 100) / $current_used" | bc)
+        local prediction_date=$(date -d "+$days days" +%Y-%m-%d)
+        
+        sqlite3 "$ANALYTICS_DB" <<SQL
+INSERT INTO capacity_predictions (mount_point, current_used_gb, predicted_used_gb, prediction_date, growth_rate_percent, days_until_full, confidence_level)
+VALUES ('$mount_point', $current_gb, $predicted_gb, '$prediction_date', $growth_rate, $days_until_full, 0.85);
+SQL
+        
+        predictions="$predictions
+In $days days ($prediction_date): ${predicted_gb}GB (${growth_rate}% growth)"
+    done
+    
+    log "Capacity predictions:"
+    log "  Current usage: $(echo "scale=2; $current_used / 1024 / 1024 / 1024" | bc)GB"
+    log "  Growth rate: $(echo "scale=2; $slope * 86400 / 1024 / 1024 / 1024" | bc)GB/day"
+    log "  Days until full: $days_until_full"
+    log "$predictions"
+    
+    rm -f "$temp_data"
+}
+
+# Anomaly detection
+detect_anomalies() {
+    log "Running anomaly detection..."
+    
+    sqlite3 "$ANALYTICS_DB" <<'SQL' | while read line; do
+        echo "ANOMALY: $line"
+    done
+-- Find backups with unusual duration
+SELECT 
+    job_name,
+    timestamp,
+    duration_seconds,
+    (SELECT AVG(duration_seconds) FROM backup_history WHERE job_name=bh.job_name) as avg_duration
+FROM backup_history bh
+WHERE duration_seconds > (SELECT AVG(duration_seconds) * 2 FROM backup_history WHERE job_name=bh.job_name)
+AND timestamp >= datetime('now', '-7 days')
+
+UNION ALL
+
+-- Find backups with unusual size
+SELECT 
+    job_name,
+    timestamp,
+    size_bytes,
+    (SELECT AVG(size_bytes) FROM backup_history WHERE job_name=bh.job_name) as avg_size
+FROM backup_history bh
+WHERE ABS(size_bytes - (SELECT AVG(size_bytes) FROM backup_history WHERE job_name=bh.job_name)) > 
+      (SELECT AVG(size_bytes) * 0.5 FROM backup_history WHERE job_name=bh.job_name)
+AND timestamp >= datetime('now', '-7 days');
+SQL
+}
+
+# Cost analysis
+analyze_costs() {
+    log "Analyzing backup costs..."
+    
+    # Cost per GB for different storage tiers (example values)
+    local local_cost=0.02    # $0.02/GB/month
+    local nas_cost=0.03      # $0.03/GB/month
+    local s3_ia_cost=0.0125  # $0.0125/GB/month
+    local glacier_cost=0.004 # $0.004/GB/month
+    local b2_cost=0.005      # $0.005/GB/month
+    
+    # Get storage sizes
+    local local_gb=$(du -sb /backup 2>/dev/null | awk '{print $1/1024/1024/1024}' || echo "0")
+    
+    # Calculate costs
+    local local_monthly=$(echo "scale=2; $local_gb * $local_cost" | bc)
+    local local_annual=$(echo "scale=2; $local_monthly * 12" | bc)
+    
+    # Insert into database
+    sqlite3 "$ANALYTICS_DB" <<SQL
+DELETE FROM cost_analysis WHERE timestamp >= datetime('now', '-1 day');
+
+INSERT INTO cost_analysis (storage_tier, total_gb, cost_per_gb, monthly_cost, annual_cost)
+VALUES 
+    ('Local Storage', $local_gb, $local_cost, $local_monthly, $local_annual),
+    ('NAS', 0, $nas_cost, 0, 0),
+    ('S3 Infrequent Access', 0, $s3_ia_cost, 0, 0),
+    ('Glacier', 0, $glacier_cost, 0, 0),
+    ('Backblaze B2', 0, $b2_cost, 0, 0);
+SQL
+    
+    log "Cost analysis completed"
+    log "  Local storage: ${local_gb}GB = $${local_monthly}/month ($${local_annual}/year)"
+}
+
+# Generate analytics dashboard
+generate_analytics_dashboard() {
+    local dashboard_file="$REPORTS_DIR/analytics_dashboard.html"
+    
+    log "Generating analytics dashboard..."
+    
+    cat > "$dashboard_file" <<'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backup Analytics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            border-bottom: 3px solid #764ba2;
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .metric-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        .metric-trend {
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+        .chart-container {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+        }
+        h2 {
+            color: #667eea;
+            margin-top: 40px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .prediction-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 Backup Analytics Dashboard</h1>
+        <p><strong>Generated:</strong> $(date)</p>
+        <p><strong>Analysis Period:</strong> Last 30 days</p>
+        
+        <div class="metrics-grid">
+HTML
+    
+    # Get key metrics from database
+    local total_backups=$(sqlite3 "$ANALYTICS_DB" "SELECT COUNT(*) FROM backup_history WHERE timestamp >= datetime('now', '-30 days');")
+    local success_rate=$(sqlite3 "$ANALYTICS_DB" "SELECT ROUND((SUM(CASE WHEN status='success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 1) FROM backup_history WHERE timestamp >= datetime('now', '-30 days');")
+    local total_data=$(sqlite3 "$ANALYTICS_DB" "SELECT ROUND(SUM(size_bytes)/1024.0/1024.0/1024.0, 2) FROM backup_history WHERE timestamp >= datetime('now', '-30 days');")
+    local avg_duration=$(sqlite3 "$ANALYTICS_DB" "SELECT ROUND(AVG(duration_seconds)/60.0, 1) FROM backup_history WHERE timestamp >= datetime('now', '-30 days');")
+    
+    cat >> "$dashboard_file" <<HTML
+            <div class="metric-card">
+                <div class="metric-label">Total Backups</div>
+                <div class="metric-value">$total_backups</div>
+                <div class="metric-trend">Last 30 days</div>
+            </div>
+            <div class="metric-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                <div class="metric-label">Success Rate</div>
+                <div class="metric-value">${success_rate}%</div>
+                <div class="metric-trend">Target: >95%</div>
+            </div>
+            <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="metric-label">Total Data Backed Up</div>
+                <div class="metric-value">${total_data}</div>
+                <div class="metric-trend">GB</div>
+            </div>
+            <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="metric-label">Avg Duration</div>
+                <div class="metric-value">${avg_duration}</div>
+                <div class="metric-trend">minutes</div>
+            </div>
+        </div>
+        
+        <h2>Capacity Predictions</h2>
+        <div class="prediction-box">
+            <h3>📊 Storage Growth Forecast</h3>
+HTML
+    
+    # Add capacity predictions
+    sqlite3 "$ANALYTICS_DB" "SELECT mount_point, prediction_date, predicted_used_gb, days_until_full FROM capacity_predictions ORDER BY prediction_date DESC LIMIT 3;" | while IFS='|' read mount date predicted days; do
+        cat >> "$dashboard_file" <<HTML
+            <p><strong>$mount</strong></p>
+            <ul>
+                <li>Predicted usage on $date: ${predicted}GB</li>
+                <li>Estimated days until full: $days</li>
+            </ul>
+HTML
+    done
+    
+    cat >> "$dashboard_file" <<HTML
+        </div>
+        
+        <h2>Performance Trends</h2>
+        <div class="chart-grid">
+            <div class="chart-container">
+                <canvas id="backupDurationChart"></canvas>
+            </div>
+            <div class="chart-container">
+                <canvas id="storageGrowthChart"></canvas>
+            </div>
+        </div>
+        
+        <h2>Cost Analysis</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Storage Tier</th>
+                    <th>Total (GB)</th>
+                    <th>Cost/GB</th>
+                    <th>Monthly Cost</th>
+                    <th>Annual Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+HTML
+    
+    # Add cost analysis
+    sqlite3 "$ANALYTICS_DB" "SELECT storage_tier, total_gb, cost_per_gb, monthly_cost, annual_cost FROM cost_analysis ORDER BY timestamp DESC LIMIT 5;" | while IFS='|' read tier gb cost monthly annual; do
+        cat >> "$dashboard_file" <<HTML
+                <tr>
+                    <td>$tier</td>
+                    <td>$(printf "%.2f" $gb)</td>
+                    <td>$$(printf "%.4f" $cost)</td>
+                    <td>$$(printf "%.2f" $monthly)</td>
+                    <td>$$(printf "%.2f" $annual)</td>
+                </tr>
+HTML
+    done
+    
+    cat >> "$dashboard_file" <<HTML
+            </tbody>
+        </table>
+        
+        <h2>Recommendations</h2>
+HTML
+    
+    # Add recommendations based on analysis
+    local storage_util=$(sqlite3 "$ANALYTICS_DB" "SELECT utilization_percent FROM storage_metrics WHERE mount_point='/backup' ORDER BY timestamp DESC LIMIT 1;" || echo "0")
+    
+    if (( $(echo "$storage_util > 80" | bc -l) )); then
+        cat >> "$dashboard_file" <<HTML
+        <div class="warning-box">
+            <h3>⚠️ Storage Capacity Warning</h3>
+            <p>Backup storage is ${storage_util}% full. Consider:</p>
+            <ul>
+                <li>Implementing backup rotation policies</li>
+                <li>Enabling compression and deduplication</li>
+                <li>Moving older backups to cold storage</li>
+                <li>Provisioning additional storage</li>
+            </ul>
+        </div>
+HTML
+    fi
+    
+    if (( $(echo "$success_rate < 95" | bc -l) )); then
+        cat >> "$dashboard_file" <<HTML
+        <div class="warning-box">
+            <h3>⚠️ Success Rate Below Target</h3>
+            <p>Success rate is ${success_rate}%, below the 95% target. Actions:</p>
+            <ul>
+                <li>Review failed backup logs</li>
+                <li>Check system resources during backup windows</li>
+                <li>Verify network connectivity for remote backups</li>
+                <li>Update backup scripts and dependencies</li>
+            </ul>
+        </div>
+HTML
+    fi
+    
+    cat >> "$dashboard_file" <<HTML
+        
+        <script>
+        // Backup Duration Chart
+        const durationCtx = document.getElementById('backupDurationChart').getContext('2d');
+        new Chart(durationCtx, {
+            type: 'line',
+            data: {
+                labels: ['Day 1', 'Day 7', 'Day 14', 'Day 21', 'Day 30'],
+                datasets: [{
+                    label: 'Avg Backup Duration (minutes)',
+                    data: [45, 48, 52, 50, 53],
+                    borderColor: 'rgb(102, 126, 234)',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Backup Duration Trend'
+                    }
+                }
+            }
+        });
+        
+        // Storage Growth Chart
+        const storageCtx = document.getElementById('storageGrowthChart').getContext('2d');
+        new Chart(storageCtx, {
+            type: 'line',
+            data: {
+                labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+                datasets: [{
+                    label: 'Storage Used (GB)',
+                    data: [450, 485, 520, 558],
+                    borderColor: 'rgb(118, 75, 162)',
+                    backgroundColor: 'rgba(118, 75, 162, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }, {
+                    label: 'Predicted',
+                    data: [null, null, null, 558, 595],
+                    borderColor: 'rgb(255, 159, 64)',
+                    borderDash: [5, 5],
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'Storage Growth & Prediction'
+                    }
+                }
+            }
+        });
+        </script>
+        
+        <hr style="margin-top: 40px;">
+        <p style="text-align: center; color: #666;">
+            Backup Analytics Dashboard v1.0 | Auto-refresh every 5 minutes
+        </p>
+    </div>
+    
+    <script>
+        // Auto-refresh every 5 minutes
+        setTimeout(() => location.reload(), 300000);
+    </script>
+</body>
+</html>
+HTML
+    
+    log "Analytics dashboard generated: $dashboard_file"
+    echo "$dashboard_file"
+}
+
+# Export analytics data
+export_analytics() {
+    local format="${1:-csv}"
+    local output_file="$REPORTS_DIR/analytics_export_$(date +%Y%m%d).${format}"
+    
+    log "Exporting analytics data to $format..."
+    
+    case "$format" in
+        csv)
+            sqlite3 -header -csv "$ANALYTICS_DB" "SELECT * FROM backup_history ORDER BY timestamp DESC LIMIT 1000;" > "$output_file"
+            ;;
+        json)
+            sqlite3 "$ANALYTICS_DB" "SELECT json_group_array(json_object(
+                'timestamp', timestamp,
+                'job_name', job_name,
+                'status', status,
+                'duration_seconds', duration_seconds,
+                'size_bytes', size_bytes
+            )) FROM backup_history ORDER BY timestamp DESC LIMIT 1000;" > "$output_file"
+            ;;
+        *)
+            log "ERROR: Unsupported format: $format"
+            return 1
+            ;;
+    esac
+    
+    log "Analytics data exported: $output_file"
+    echo "$output_file"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_analytics
+        ;;
+    
+    collect)
+        collect_backup_metrics
+        collect_storage_metrics
+        calculate_trends
+        ;;
+    
+    predict)
+        predict_capacity "$2"
+        ;;
+    
+    anomalies)
+        detect_anomalies
+        ;;
+    
+    costs)
+        analyze_costs
+        ;;
+    
+    dashboard)
+        generate_analytics_dashboard
+        ;;
+    
+    export)
+        export_analytics "$2"
+        ;;
+    
+    full-analysis)
+        log "Running full analytics cycle..."
+        collect_backup_metrics
+        collect_storage_metrics
+        calculate_trends
+        predict_capacity "/backup"
+        detect_anomalies
+        analyze_costs
+        generate_analytics_dashboard
+        ;;
+    
+    *)
+        cat <<HELP
+Backup Analytics & Predictive Analysis
+
+Usage: $0 <command> [options]
+
+Commands:
+  init                - Initialize analytics database
+  collect             - Collect backup and storage metrics
+  predict [mount]     - Run capacity prediction
+  anomalies           - Detect backup anomalies
+  costs               - Analyze backup costs
+  dashboard           - Generate analytics dashboard
+  export [csv|json]   - Export analytics data
+  full-analysis       - Run complete analysis cycle
+
+Examples:
+  $0 init
+  $0 collect
+  $0 predict /backup
+  $0 dashboard
+  $0 export csv
+
+Dashboard: file://$REPORTS_DIR/analytics_dashboard.html
+HELP
+        ;;
+esac
+EOF
+
+chmod +x backup_analytics.sh
+```
+
+---
+
+## 🎓 Итоговое задание модуля 8
+
+```bash
+cat > module8_complete_setup.sh <<'COMPLETE'
+#!/bin/bash
+
+echo "=============================================="
+echo "Module 8: Complete Monitoring Setup"
+echo "=============================================="
+
+# 1. Initialize Prometheus Exporter
+echo ""
+echo "1. Setting up Prometheus Backup Exporter..."
+./backup_prometheus_exporter.sh init
+./backup_prometheus_exporter.sh collect
+./backup_prometheus_exporter.sh dashboard > /tmp/grafana_dashboard.json
+
+# Start metrics collection daemon
+./backup_prometheus_exporter.sh daemon 60 &
+EXPORTER_PID=$!
+echo "Metrics exporter running (PID: $EXPORTER_PID)"
+
+# 2. Initialize AlertManager
+echo ""
+echo "2. Setting up AlertManager..."
+./backup_alertmanager.sh init
+./backup_alertmanager.sh start
+
+# Test alert
+./backup_alertmanager.sh test
+
+# 3. Initialize Log Aggregation
+echo ""
+echo "3. Setting up Log Aggregation (Loki + Promtail)..."
+./backup_log_aggregation.sh init
+./backup_log_aggregation.sh start
+
+# Test log ingestion
+sleep 10
+./backup_log_aggregation.sh test
+
+# 4. Initialize Analytics
+echo ""
+echo "4. Setting up Backup Analytics..."
+./backup_analytics.sh init
+./backup_analytics.sh full-analysis
+
+echo ""
+echo "=============================================="
+echo "Module 8 Setup Complete!"
+echo "=============================================="
+echo ""
+echo "Access Points:"
+echo "  - Prometheus Metrics: http://localhost:9100/metrics"
+echo "  - AlertManager UI: http://localhost:9093"
+echo "  - Loki API: http://localhost:3100"
+echo "  - Promtail: http://localhost:9080"
+echo ""
+echo "Generated Files:"
+echo "  - Grafana Dashboard: /tmp/grafana_dashboard.json"
+echo "  - Analytics Dashboard: file://$REPORTS_DIR/analytics_dashboard.html"
+echo "  - Alert Stats: /var/log/alert_statistics_*.html"
+echo "  - Log Report: /var/log/log_analysis_report_*.html"
+echo ""
+echo "Next Steps:"
+echo "  1. Import Grafana dashboard: /tmp/grafana_dashboard.json"
+echo "  2. Configure notification channels in AlertManager"
+echo "  3. Review analytics dashboard for insights"
+echo "  4. Set up automated reporting with cron"
+echo ""
+echo "Recommended Cron Schedule:"
+echo "  # Metrics collection"
+echo "  */5 * * * * /usr/local/bin/backup_prometheus_exporter.sh collect"
+echo ""
+echo "  # Daily reports"
+echo "  0 8 * * * /usr/local/bin/backup_analytics.sh dashboard"
+echo "  0 8 * * * /usr/local/bin/backup_alertmanager.sh stats"
+echo "  0 8 * * * /usr/local/bin/backup_log_aggregation.sh report"
+echo ""
+echo "  # Weekly analysis"
+echo "  0 9 * * 1 /usr/local/bin/backup_analytics.sh full-analysis"
+echo ""
+COMPLETE
+
+chmod +x module8_complete_setup.sh
+```
+
+---
+
+## 📊 Итоговый отчет: Финальная проверка
+
+```bash
+cat > final_course_validation.sh <<'VALIDATION'
+#!/bin/bash
+
+echo "=============================================="
+echo "🎓 Backup & Recovery: Final Validation"
+echo "=============================================="
+echo ""
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+check_pass() {
+    echo -e "${GREEN}✓${NC} $1"
+}
+
+check_fail() {
+    echo -e "${RED}✗${NC} $1"
+}
+
+check_warn() {
+    echo -e "${YELLOW}⚠${NC} $1"
+}
+
+# Module 1: Backup Strategies
+echo "Module 1: Backup Strategies"
+echo "─────────────────────────────"
+if [ -f /usr/local/bin/backup.sh ]; then
+    check_pass "Backup script installed"
+else
+    check_fail "Backup script not found"
+fi
+
+if crontab -l | grep -q backup; then
+    check_pass "Backup schedule configured"
+else
+    check_warn "Backup schedule not found"
+fi
+
+# Module 2: Database Backups
+echo ""
+echo "Module 2: Database Backups"
+echo "──────────────────────────"
+if [ -f /usr/local/bin/mysql_backup.sh ]; then
+    check_pass "MySQL backup script installed"
+else
+    check_fail "MySQL backup script not found"
+fi
+
+if [ -f /usr/local/bin/pg_backup_pitr.sh ]; then
+    check_pass "PostgreSQL PITR script installed"
+else
+    check_fail "PostgreSQL PITR script not found"
+fi
+
+if [ -d /backup/mysql ] || [ -d /backup/postgresql ]; then
+    check_pass "Database backup directories exist"
+else
+    check_warn "Database backup directories not found"
+fi
+
+# Module 3: Filesystem Backups
+echo ""
+echo "Module 3: Filesystem Backups"
+echo "────────────────────────────"
+if [ -f /usr/local/bin/rsync_backup.sh ]; then
+    check_pass "Rsync backup script installed"
+else
+    check_fail "Rsync backup script not found"
+fi
+
+if [ -f /usr/local/bin/system_backup.sh ]; then
+    check_pass "System backup script installed"
+else
+    check_fail "System backup script not found"
+fi
+
+# Module 4: Cloud Backups
+echo ""
+echo "Module 4: Cloud Backups"
+echo "───────────────────────"
+if command -v rclone &>/dev/null; then
+    check_pass "Rclone installed"
+else
+    check_warn "Rclone not installed"
+fi
+
+if command -v restic &>/dev/null; then
+    check_pass "Restic installed"
+else
+    check_warn "Restic not installed"
+fi
+
+if [ -f /usr/local/bin/cloud_backup.sh ]; then
+    check_pass "Cloud backup script installed"
+else
+    check_fail "Cloud backup script not found"
+fi
+
+# Module 5: DR Automation
+echo ""
+echo "Module 5: DR Automation"
+echo "───────────────────────"
+if [ -f /usr/local/bin/recovery_orchestrator.sh ]; then
+    check_pass "Recovery orchestrator installed"
+else
+    check_fail "Recovery orchestrator not found"
+fi
+
+if [ -f /usr/local/bin/dr_testing_framework.sh ]; then
+    check_pass "DR testing framework installed"
+else
+    check_fail "DR testing framework not found"
+fi
+
+if [ -f /usr/local/bin/automated_failover.sh ]; then
+    check_pass "Automated failover system installed"
+else
+    check_fail "Automated failover system not found"
+fi
+
+# Module 6: Security & Compliance
+echo ""
+echo "Module 6: Security & Compliance"
+echo "────────────────────────────────"
+if [ -f /usr/local/bin/secure_backup_system.sh ]; then
+    check_pass "Secure backup system installed"
+else
+    check_fail "Secure backup system not found"
+fi
+
+if [ -d /etc/backup-security/keys ]; then
+    check_pass "Encryption keys directory exists"
+else
+    check_warn "Encryption keys directory not found"
+fi
+
+if [ -f /var/log/backup-security-audit.log ]; then
+    check_pass "Security audit logging enabled"
+else
+    check_warn "Security audit log not found"
+fi
+
+# Module 7: Performance Optimization
+echo ""
+echo "Module 7: Performance Optimization"
+echo "───────────────────────────────────"
+if [ -f /usr/local/bin/compression_optimizer.sh ]; then
+    check_pass "Compression optimizer installed"
+else
+    check_fail "Compression optimizer not found"
+fi
+
+if [ -f /usr/local/bin/parallel_backup_system.sh ]; then
+    check_pass "Parallel backup system installed"
+else
+    check_fail "Parallel backup system not found"
+fi
+
+if [ -f /usr/local/bin/network_backup_optimizer.sh ]; then
+    check_pass "Network optimizer installed"
+else
+    check_fail "Network optimizer not found"
+fi
+
+# Module 8: Monitoring & Analytics
+echo ""
+echo "Module 8: Monitoring & Analytics"
+echo "─────────────────────────────────"
+if command -v node_exporter &>/dev/null; then
+    check_pass "Prometheus node_exporter installed"
+else
+    check_warn "node_exporter not installed"
+fi
+
+if command -v alertmanager &>/dev/null; then
+    check_pass "AlertManager installed"
+else
+    check_warn "AlertManager not installed"
+fi
+
+if command -v loki &>/dev/null; then
+    check_pass "Loki installed"
+else
+    check_warn "Loki not installed"
+fi
+
+if command -v promtail &>/dev/null; then
+    check_pass "Promtail installed"
+else
+    check_warn "Promtail not installed"
+fi
+
+if [ -f /var/lib/backup-analytics/analytics.db ]; then
+    check_pass "Analytics database initialized"
+else
+    check_warn "Analytics database not found"
+fi
+
+# Final Statistics
+echo ""
+echo "=============================================="
+echo "📈 Final Statistics"
+echo "=============================================="
+
+# Count backups
+total_backups=$(find /backup -type f \( -name "*.tar.gz" -o -name "*.sql.gz" \) 2>/dev/null | wc -l)
+echo "Total backups created: $total_backups"
+
+# Storage usage
+if [ -d /backup ]; then
+    storage_used=$(du -sh /backup 2>/dev/null | cut -f1 || echo "N/A")
+    echo "Backup storage used: $storage_used"
+fi
+
+# Count scripts
+scripts_installed=$(ls /usr/local/bin/*backup* /usr/local/bin/*recovery* 2>/dev/null | wc -l)
+echo "Scripts installed: $scripts_installed"
+
+# Check running services
+echo ""
+echo "Running Services:"
+for service in node_exporter alertmanager loki promtail; do
+    if systemctl is-active --quiet $service 2>/dev/null; then
+        check_pass "$service is running"
+    else
+        check_warn "$service is not running"
+    fi
+done
+
+echo ""
+echo "=============================================="
+echo "🎯 Course Completion Summary"
+echo "=============================================="
+echo ""
+echo "Modules Completed:"
+echo "  ✓ Module 1: Backup Strategies (3-2-1-1-0 Rule)"
+echo "  ✓ Module 2: Database Backups (MySQL, PostgreSQL, MongoDB, Redis)"
+echo "  ✓ Module 3: Filesystem Backups (LVM, Btrfs, ZFS, rsync)"
+echo "  ✓ Module 4: Cloud Backups (S3, B2, Multi-cloud)"
+echo "  ✓ Module 5: DR Automation (Recovery, Testing, Failover)"
+echo "  ✓ Module 6: Security & Compliance (Encryption, Immutability)"
+echo "  ✓ Module 7: Performance (Compression, Parallel, Network)"
+echo "  ✓ Module 8: Monitoring (Prometheus, Loki, Analytics)"
+echo ""
+echo "Skills Acquired:"
+echo "  • Comprehensive backup strategy design"
+echo "  • Database-specific backup techniques"
+echo "  • Filesystem snapshot management"
+echo "  • Multi-cloud backup orchestration"
+echo "  • Automated disaster recovery"
+echo "  • Security and compliance frameworks"
+echo "  • Performance optimization"
+echo "  • Full-stack monitoring and analytics"
+echo ""
+echo "Generated Artifacts:"
+ls -1 /var/log/*report*.html 2>/dev/null | tail -5
+echo ""
+echo "=============================================="
+echo "🎓 COURSE COMPLETED SUCCESSFULLY!"
+echo "=============================================="
+echo ""
+echo "Next Steps:"
+echo "  1. Review generated reports and dashboards"
+echo "  2. Customize scripts for your environment"
+echo "  3. Schedule regular DR testing"
+echo "  4. Document your backup procedures"
+echo "  5. Train your team on recovery processes"
+echo ""
+echo "Remember the Golden Rules:"
+echo "  • Backup without tested restore = disaster waiting"
+echo "  • Security without compliance = audit nightmare"
+echo "  • Monitoring without alerting = blind operations"
+echo ""
+echo "Thank you for completing the course! 🚀"
+echo ""
+VALIDATION
+
+chmod +x final_course_validation.sh
+```
+
+---
+
+## 🎓 Финальный Сертификат
+
+```bash
+cat > generate_certificate.sh <<'CERT'
+#!/bin/bash
+
+cat > /tmp/backup_course_certificate.txt <<'CERTIFICATE'
+╔══════════════════════════════════════════════════════════════╗
+║                                                              ║
+║              CERTIFICATE OF COMPLETION                       ║
+║                                                              ║
+╚══════════════════════════════════════════════════════════════╝
+
+                   Backup & Recovery Refresh
+              Ежедневный/Полугодовой курс для DevOps
+
+This certifies that the student has successfully completed
+the comprehensive Backup & Recovery training course.
+
+Course Duration: 8 Modules (2-3 hours each)
+Completion Date: $(date +"%B %d, %Y")
+
+Modules Mastered:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Module 1: Backup Strategy Fundamentals
+  - RTO/RPO concepts
+  - 3-2-1-1-0 backup rule
+  - Retention policies
+
+✓ Module 2: Database Backup Techniques
+  - MySQL/PostgreSQL PITR
+  - MongoDB & Redis backups
+  - Transaction log management
+
+✓ Module 3: Filesystem & System Backups
+  - LVM/Btrfs/ZFS snapshots
+  - rsync-based deduplication
+  - System state preservation
+
+✓ Module 4: Cloud & Hybrid Strategies
+  - Multi-cloud orchestration
+  - Storage lifecycle management
+  - Cost optimization
+
+✓ Module 5: Disaster Recovery Automation
+  - Recovery orchestration
+  - Automated failover systems
+  - DR testing frameworks
+
+✓ Module 6: Security & Compliance
+  - Encryption at rest/transit
+  - Immutability & air-gap
+  - Audit logging & compliance
+
+✓ Module 7: Performance Optimization
+  - Compression benchmarking
+  - Parallel backup systems
+  - Network optimization
+
+✓ Module 8: Monitoring & Analytics
+  - Prometheus metrics
+  - Log aggregation (Loki)
+  - Predictive analytics
+
+Skills Validated:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Production-ready backup infrastructure design
+• Database-specific recovery procedures
+• Cloud-native backup strategies
+• Security and compliance implementation
+• Performance tuning and optimization
+• Full-stack monitoring and alerting
+• Disaster recovery planning and testing
+
+Production-Ready Deliverables:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• 40+ production-ready scripts
+• Automated recovery procedures
+• Monitoring dashboards
+• Alert configurations
+• DR runbooks
+• Security frameworks
+• Analytics systems
+
+Signed,
+Backup & Recovery Training Program
+$(date +"%Y")
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+"Tested backups are the only backups that matter"
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CERTIFICATE
+
+cat /tmp/backup_course_certificate.txt
+
+# Also generate HTML version
+cat > /tmp/backup_course_certificate.html <<'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backup & Recovery Course Certificate</title>
+    <style>
+        body {
+            font-family: 'Georgia', serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            margin: 0;
+        }
+        .certificate {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 60px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            border: 10px solid #667eea;
+        }
+        h1 {
+            text-align: center;
+            color: #667eea;
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+        .subtitle {
+            text-align: center;
+            color: #764ba2;
+            font-size: 1.5em;
+            margin-bottom: 30px;
+        }
+        .content {
+            line-height: 1.8;
+            color: #333;
+        }
+        .modules {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin: 30px 0;
+        }
+        .module {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #667eea;
+        }
+        .signature {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 30px;
+            border-top: 2px solid #667eea;
+        }
+        .date {
+            text-align: center;
+            color: #666;
+            margin-top: 20px;
+        }
+        .seal {
+            text-align: center;
+            font-size: 4em;
+            color: #764ba2;
+            margin: 40px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="certificate">
+        <h1>Certificate of Completion</h1>
+        <div class="subtitle">Backup & Recovery Mastery Course</div>
+        
+        <div class="seal">🎓</div>
+        
+        <div class="content">
+            <p style="text-align: center; font-size: 1.2em;">
+                This certifies that the student has successfully completed the
+                <strong>Comprehensive Backup & Recovery Training Course</strong>
+            </p>
+            
+            <div class="modules">
+                <div class="module">✓ Backup Strategies</div>
+                <div class="module">✓ Database Backups</div>
+                <div class="module">✓ Filesystem Backups</div>
+                <div class="module">✓ Cloud & Hybrid</div>
+                <div class="module">✓ DR Automation</div>
+                <div class="module">✓ Security & Compliance</div>
+                <div class="module">✓ Performance Tuning</div>
+                <div class="module">✓ Monitoring & Analytics</div>
+            </div>
+            
+            <p style="text-align: center; margin-top: 40px;">
+                <strong>Skills Validated:</strong> Production-ready backup infrastructure,
+                disaster recovery planning, security implementation, and full-stack monitoring
+            </p>
+            
+            <div class="signature">
+                <p style="font-size: 1.3em; margin: 0;">Backup & Recovery Training Program</p>
+                <p style="color: #666; font-style: italic;">"Tested backups are the only backups that matter"</p>
+            </div>
+            
+            <div class="date">
+                Completed: $(date +"%B %d, %Y")
+            </div>
+        </div>
+    </div>
+</body>
+</html>
+HTML
+
+echo ""
+echo "Certificate generated!"
+echo "  - Text version: /tmp/backup_course_certificate.txt"
+echo "  - HTML version: /tmp/backup_course_certificate.html"
+echo ""
+echo "Open HTML certificate:"
+echo "  firefox /tmp/backup_course_certificate.html"
+CERT
+
+chmod +x generate_certificate.sh
+```
+
+---
+
+## 🎯 Финальный запуск всего курса
+
+```bash
+cat > run_complete_course.sh <<'FINAL'
+#!/bin/bash
+
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║     Backup & Recovery: Complete Course Execution            ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+echo "This will run the entire course setup. Continue? (yes/no)"
+read -r confirm
+
+if [ "$confirm" != "yes" ]; then
+    echo "Aborted."
+    exit 0
+fi
+
+# Execute all modules
+for module in {1..8}; do
+    echo ""
+    echo "════════════════════════════════════════════════════════════════"
+    echo "  MODULE $module"
+    echo "════════════════════════════════════════════════════════════════"
+    
+    case $module in
+        1) echo "Setting up backup strategies..."
+           ./backup.sh init 2>/dev/null || true
+           ;;
+        2) echo "Configuring database backups..."
+           ./mysql_backup.sh daily 2>/dev/null || true
+           ;;
+        3) echo "Setting up filesystem backups..."
+           ./rsync_backup.sh snapshot 2>/dev/null || true
+           ;;
+        4) echo "Configuring cloud backups..."
+           ./cloud_backup.sh init 2>/dev/null || true
+           ;;
+        5) echo "Setting up DR automation..."
+           ./recovery_orchestrator.sh init 2>/dev/null || true
+           ;;
+        6) echo "Implementing security..."
+           ./secure_backup_system.sh init 2>/dev/null || true
+           ;;
+        7) echo "Running performance tests..."
+           ./compression_optimizer.sh quick 2>/dev/null || true
+           ;;
+        8) echo "Setting up monitoring..."
+           ./module8_complete_setup.sh 2>/dev/null || true
+           ;;
+    esac
+    
+    sleep 2
+done
+
+# Final validation
+echo ""
+echo "════════════════════════════════════════════════════════════════"
+echo "  FINAL VALIDATION"
+echo "════════════════════════════════════════════════════════════════"
+./final_course_validation.sh
+
+# Generate certificate
+echo ""
+./generate_certificate.sh
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║                 🎉 COURSE COMPLETED! 🎉                       ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
+FINAL
+
+chmod +x run_complete_course.sh
+```
+
+---
+
+
+**Практические навыки:**
+
+- 🔄 Автоматизация всего цикла backup & recovery
+- 🔐 Enterprise-grade security и compliance
+- ⚡ Performance optimization и capacity planning
+- 📊 Full-stack monitoring и predictive analytics
+- 🚨 Automated alerting и incident response
+- ☁️ Multi-cloud orchestration
+
+**Помни главные правила:**
+
+> "Backup без tested restore = катастрофа в ожидании"  
+> "Security без compliance = аудиторский кошмар"  
+> "Monitoring без alerting = слепые операции"
+
+**Следующие шаги:**
+
+1. Адаптируй скрипты под свою инфраструктуру
+2. Регулярно тестируй recovery процедуры
+3. Поддерживай документацию в актуальном состоянии
+4. Проводи DR drills минимум раз в квартал
+5. Обучай команду процедурам восстановления
+
+**Успехов в production! 🚀**
+
+Scenarios
+
+# Модуль 9: Disaster Recovery Scenarios & Real-World Incident Response (35 минут)
+
+## 🎯 Напоминалка
+
+### Common Disaster Scenarios
+
+```
+Disaster Category Tree
+├── Technical Failures
+│   ├── Hardware Failures
+│   │   ├── Disk failure (single/multiple)
+│   │   ├── RAID controller failure
+│   │   ├── Server hardware failure
+│   │   ├── Storage array failure
+│   │   └── Network equipment failure
+│   ├── Software Failures
+│   │   ├── Database corruption
+│   │   ├── Application bugs
+│   │   ├── OS corruption
+│   │   └── Filesystem corruption
+│   └── Infrastructure Failures
+│       ├── Power outage
+│       ├── Cooling failure
+│       ├── Network outage
+│       └── Datacenter disaster
+│
+├── Security Incidents
+│   ├── Ransomware attack
+│   ├── Data breach
+│   ├── Malware infection
+│   ├── DDoS attack
+│   └── Unauthorized access
+│
+├── Human Errors
+│   ├── Accidental deletion
+│   ├── Configuration mistakes
+│   ├── DROP TABLE/DATABASE
+│   ├── Deployment errors
+│   └── Permission changes
+│
+└── Natural Disasters
+    ├── Fire
+    ├── Flood
+    ├── Earthquake
+    ├── Hurricane/Storm
+    └── Power grid failure
+```
+
+### Incident Response Phases
+
+```
+NIST Incident Response Lifecycle
+┌────────────────────────────────┐
+│   1. PREPARATION               │
+│   - DR plans ready             │
+│   - Team trained               │
+│   - Tools available            │
+└────────────────────────────────┘
+           ↓
+┌────────────────────────────────┐
+│   2. IDENTIFICATION            │
+│   - Detect incident            │
+│   - Assess scope               │
+│   - Classify severity          │
+└────────────────────────────────┘
+           ↓
+┌────────────────────────────────┐
+│   3. CONTAINMENT               │
+│   - Isolate affected systems   │
+│   - Prevent spread             │
+│   - Preserve evidence          │
+└────────────────────────────────┘
+           ↓
+┌────────────────────────────────┐
+│   4. ERADICATION               │
+│   - Remove threat              │
+│   - Patch vulnerabilities      │
+│   - Clean infected systems     │
+└────────────────────────────────┘
+           ↓
+┌────────────────────────────────┐
+│   5. RECOVERY                  │
+│   - Restore from clean backups │
+│   - Verify integrity           │
+│   - Resume operations          │
+└────────────────────────────────┘
+           ↓
+┌────────────────────────────────┐
+│   6. LESSONS LEARNED           │
+│   - Post-incident review       │
+│   - Update procedures          │
+│   - Improve defenses           │
+└────────────────────────────────┘
+```
+
+### Recovery Decision Matrix
+
+```
+Impact vs Complexity
+High │  P1: All hands    │  P1: Major incident
+     │  Immediate action │  Executive escalation
+     │                   │
+Med  │  P2: Quick fix    │  P2: Planned recovery
+     │  Within hours     │  Coordinate teams
+     │                   │
+Low  │  P3: Schedule     │  P3: Standard process
+     │  Next window      │  Document & review
+     └───────────────────┴────────────────────
+       Low              Med              High
+              COMPLEXITY
+```
+
+---
+
+## 💻 Задание 1: Ransomware Attack Response & Recovery
+
+```bash
+cat > ransomware_recovery.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+INCIDENT_ID="$(date +%Y%m%d-%H%M%S)-ransomware"
+INCIDENT_DIR="/var/incident-response/$INCIDENT_ID"
+FORENSICS_DIR="$INCIDENT_DIR/forensics"
+RECOVERY_LOG="$INCIDENT_DIR/recovery.log"
+BACKUP_ROOT="/backup"
+CLEAN_BACKUP_POINT=""
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    local level="$1"
+    shift
+    local message="$*"
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] [$level] $message" | tee -a "$RECOVERY_LOG"
+}
+
+alert() {
+    echo -e "${RED}[!!! ALERT !!!]${NC} $*" | tee -a "$RECOVERY_LOG"
+}
+
+# Initialize incident response
+init_incident_response() {
+    alert "RANSOMWARE INCIDENT DETECTED"
+    alert "Incident ID: $INCIDENT_ID"
+    
+    mkdir -p "$INCIDENT_DIR"
+    mkdir -p "$FORENSICS_DIR"
+    
+    log INFO "Incident response initialized"
+    log INFO "Log file: $RECOVERY_LOG"
+    
+    # Create incident timeline
+    cat > "$INCIDENT_DIR/timeline.md" <<TIMELINE
+# Ransomware Incident Timeline
+**Incident ID:** $INCIDENT_ID
+**Detected:** $(date)
+
+## Timeline
+- $(date): Incident detected
+TIMELINE
+    
+    # Notify team
+    notify_team "CRITICAL: Ransomware incident detected. Response initiated."
+}
+
+# Phase 1: Immediate Containment
+phase1_containment() {
+    alert "PHASE 1: IMMEDIATE CONTAINMENT"
+    
+    log INFO "Starting containment procedures..."
+    
+    # Step 1: Network Isolation
+    log INFO "Step 1/5: Network isolation"
+    isolate_affected_systems
+    
+    # Step 2: Stop Services
+    log INFO "Step 2/5: Stopping critical services"
+    stop_services
+    
+    # Step 3: Kill Suspicious Processes
+    log INFO "Step 3/5: Identifying and killing suspicious processes"
+    kill_suspicious_processes
+    
+    # Step 4: Block Malicious IPs
+    log INFO "Step 4/5: Blocking malicious IPs"
+    block_malicious_ips
+    
+    # Step 5: Document Initial State
+    log INFO "Step 5/5: Documenting initial state"
+    document_initial_state
+    
+    log INFO "Phase 1 containment complete"
+    echo "- $(date): Phase 1 containment completed" >> "$INCIDENT_DIR/timeline.md"
+}
+
+# Isolate affected systems
+isolate_affected_systems() {
+    log WARN "Isolating affected systems from network..."
+    
+    # Identify network interfaces
+    local interfaces=$(ip link show | grep -E '^[0-9]+:' | awk -F': ' '{print $2}' | grep -v lo)
+    
+    for iface in $interfaces; do
+        # Check if interface is critical (preserve management access)
+        if [[ "$iface" =~ ^(mgmt|ipmi) ]]; then
+            log INFO "Preserving management interface: $iface"
+            continue
+        fi
+        
+        log WARN "Isolating interface: $iface"
+        
+        # Block all outbound connections except to backup server
+        iptables -A OUTPUT -o "$iface" -d backup-server.local -j ACCEPT
+        iptables -A OUTPUT -o "$iface" -j DROP
+        
+        # Block all inbound connections except from trusted IPs
+        iptables -A INPUT -i "$iface" -s 10.0.0.0/8 -j ACCEPT
+        iptables -A INPUT -i "$iface" -j DROP
+    done
+    
+    # Save iptables rules
+    iptables-save > "$FORENSICS_DIR/iptables_isolation.rules"
+    
+    log INFO "Network isolation completed"
+    log INFO "Isolation rules saved to: $FORENSICS_DIR/iptables_isolation.rules"
+}
+
+# Stop services to prevent further encryption
+stop_services() {
+    log WARN "Stopping services to prevent further damage..."
+    
+    local services_to_stop=(
+        "apache2"
+        "nginx"
+        "mysql"
+        "postgresql"
+        "docker"
+        "smbd"
+        "nfs-server"
+    )
+    
+    for service in "${services_to_stop[@]}"; do
+        if systemctl is-active --quiet "$service" 2>/dev/null; then
+            log INFO "Stopping service: $service"
+            systemctl stop "$service"
+            systemctl disable "$service"
+        fi
+    done
+    
+    log INFO "Critical services stopped and disabled"
+}
+
+# Kill suspicious processes
+kill_suspicious_processes() {
+    log INFO "Scanning for suspicious processes..."
+    
+    # Common ransomware indicators
+    local suspicious_patterns=(
+        "encrypt"
+        "ransom"
+        ".locked"
+        "recover+.*\.txt"
+        "wannacry"
+        "ryuk"
+    )
+    
+    # Save process list before killing
+    ps auxf > "$FORENSICS_DIR/processes_before_kill.txt"
+    
+    for pattern in "${suspicious_patterns[@]}"; do
+        local pids=$(pgrep -f "$pattern" 2>/dev/null || true)
+        
+        if [ -n "$pids" ]; then
+            log WARN "Found suspicious processes matching '$pattern': $pids"
+            
+            for pid in $pids; do
+                # Get process details
+                ps -p $pid -o pid,ppid,user,cmd >> "$FORENSICS_DIR/suspicious_processes.txt"
+                
+                # Kill process
+                kill -9 $pid 2>/dev/null || true
+                log INFO "Killed process: $pid"
+            done
+        fi
+    done
+    
+    # Save process list after killing
+    ps auxf > "$FORENSICS_DIR/processes_after_kill.txt"
+}
+
+# Block malicious IPs
+block_malicious_ips() {
+    log INFO "Blocking known malicious IPs..."
+    
+    # Check active connections
+    netstat -tupn > "$FORENSICS_DIR/network_connections.txt"
+    
+    # Look for suspicious connections
+    local suspicious_ips=$(netstat -tupn | grep ESTABLISHED | awk '{print $5}' | cut -d: -f1 | sort -u)
+    
+    for ip in $suspicious_ips; do
+        # Skip local IPs
+        if [[ "$ip" =~ ^(10\.|172\.|192\.168\.|127\.) ]]; then
+            continue
+        fi
+        
+        log WARN "Blocking suspicious IP: $ip"
+        iptables -A INPUT -s "$ip" -j DROP
+        iptables -A OUTPUT -d "$ip" -j DROP
+        
+        echo "$ip" >> "$FORENSICS_DIR/blocked_ips.txt"
+    done
+}
+
+# Document initial state
+document_initial_state() {
+    log INFO "Documenting initial system state..."
+    
+    # System information
+    cat > "$FORENSICS_DIR/system_info.txt" <<INFO
+System Information
+==================
+Date: $(date)
+Hostname: $(hostname)
+Kernel: $(uname -a)
+Uptime: $(uptime)
+
+INFO
+    
+    # Find encrypted files
+    log INFO "Scanning for encrypted/ransom note files..."
+    
+    # Common ransom note filenames
+    local ransom_patterns=(
+        "*DECRYPT*"
+        "*README*"
+        "*HELP*"
+        "*RECOVER*"
+        "*.txt.locked"
+        "*.encrypted"
+    )
+    
+    for pattern in "${ransom_patterns[@]}"; do
+        find / -name "$pattern" -type f 2>/dev/null >> "$FORENSICS_DIR/ransom_notes.txt" || true
+    done
+    
+    # Sample a ransom note if found
+    local first_note=$(head -1 "$FORENSICS_DIR/ransom_notes.txt" 2>/dev/null)
+    if [ -n "$first_note" ]; then
+        log WARN "Ransom note found: $first_note"
+        cp "$first_note" "$FORENSICS_DIR/sample_ransom_note.txt"
+    fi
+    
+    # Check for file extension changes (indicator of encryption)
+    log INFO "Analyzing file extensions..."
+    find /data -type f -name "*.locked" -o -name "*.encrypted" -o -name "*.crypto" 2>/dev/null | \
+        wc -l > "$FORENSICS_DIR/encrypted_file_count.txt"
+    
+    local encrypted_count=$(cat "$FORENSICS_DIR/encrypted_file_count.txt")
+    log WARN "Found $encrypted_count potentially encrypted files"
+    
+    # Sample encrypted file for analysis
+    find /data -type f \( -name "*.locked" -o -name "*.encrypted" \) 2>/dev/null | head -1 | \
+        xargs -I {} cp {} "$FORENSICS_DIR/sample_encrypted_file" 2>/dev/null || true
+    
+    # File system timeline
+    find /data -type f -mtime -1 -ls > "$FORENSICS_DIR/recently_modified_files.txt" 2>/dev/null || true
+}
+
+# Phase 2: Identify Clean Backup Point
+phase2_identify_clean_backup() {
+    alert "PHASE 2: IDENTIFY CLEAN BACKUP POINT"
+    
+    log INFO "Analyzing backups to find last clean state..."
+    
+    # List all available backups
+    local backups_list="$FORENSICS_DIR/available_backups.txt"
+    
+    cat > "$backups_list" <<HEADER
+Available Backups Analysis
+==========================
+Generated: $(date)
+
+HEADER
+    
+    # Check rsync snapshots
+    if [ -d "$BACKUP_ROOT/rsync-snapshots" ]; then
+        log INFO "Analyzing rsync snapshots..."
+        
+        ls -lt "$BACKUP_ROOT/rsync-snapshots" | grep -v "^total" | while read line; do
+            echo "$line" >> "$backups_list"
+        done
+    fi
+    
+    # Check database backups
+    if [ -d "$BACKUP_ROOT/mysql" ]; then
+        log INFO "Analyzing MySQL backups..."
+        echo "" >> "$backups_list"
+        echo "MySQL Backups:" >> "$backups_list"
+        ls -lt "$BACKUP_ROOT/mysql/daily" | head -10 >> "$backups_list"
+    fi
+    
+    # Identify infection timeline
+    log INFO "Determining infection timeline..."
+    
+    # Find first encrypted file timestamp
+    local first_encrypted=$(find /data -type f \( -name "*.locked" -o -name "*.encrypted" \) \
+        -printf '%T@ %p\n' 2>/dev/null | sort -n | head -1 | awk '{print $1}')
+    
+    if [ -n "$first_encrypted" ]; then
+        local infection_time=$(date -d "@$first_encrypted" '+%Y-%m-%d %H:%M:%S')
+        log WARN "Estimated infection start time: $infection_time"
+        echo "Estimated infection time: $infection_time" >> "$backups_list"
+        
+        # Find latest backup before infection
+        local infection_timestamp=$(date -d "$infection_time" +%s)
+        
+        for snapshot in $(ls -t "$BACKUP_ROOT/rsync-snapshots" 2>/dev/null | grep -v "latest"); do
+            local snapshot_time=$(stat -c %Y "$BACKUP_ROOT/rsync-snapshots/$snapshot" 2>/dev/null)
+            
+            if [ "$snapshot_time" -lt "$infection_timestamp" ]; then
+                CLEAN_BACKUP_POINT="$BACKUP_ROOT/rsync-snapshots/$snapshot"
+                log INFO "Identified clean backup point: $snapshot"
+                echo "RECOMMENDED RESTORE POINT: $snapshot" >> "$backups_list"
+                break
+            fi
+        done
+    fi
+    
+    # Verify backup integrity
+    if [ -n "$CLEAN_BACKUP_POINT" ]; then
+        log INFO "Verifying backup integrity..."
+        verify_backup_integrity "$CLEAN_BACKUP_POINT"
+    else
+        alert "Could not identify clean backup point automatically"
+        log ERROR "Manual intervention required to select restore point"
+    fi
+    
+    echo "- $(date): Clean backup point identified" >> "$INCIDENT_DIR/timeline.md"
+}
+
+# Verify backup integrity
+verify_backup_integrity() {
+    local backup_path="$1"
+    
+    log INFO "Verifying integrity of: $backup_path"
+    
+    # Check if incomplete flag exists
+    if [ -f "$backup_path/.incomplete" ]; then
+        log ERROR "Backup is marked as incomplete!"
+        return 1
+    fi
+    
+    # Check for ransom notes in backup
+    local ransom_in_backup=$(find "$backup_path" -type f \
+        -name "*DECRYPT*" -o -name "*RANSOM*" 2>/dev/null | wc -l)
+    
+    if [ "$ransom_in_backup" -gt 0 ]; then
+        log ERROR "Ransom notes found in backup! This backup is infected."
+        return 1
+    fi
+    
+    # Check for encrypted files in backup
+    local encrypted_in_backup=$(find "$backup_path" -type f \
+        -name "*.locked" -o -name "*.encrypted" 2>/dev/null | wc -l)
+    
+    if [ "$encrypted_in_backup" -gt 0 ]; then
+        log ERROR "Encrypted files found in backup! This backup is infected."
+        return 1
+    fi
+    
+    # Verify checksums if available
+    if [ -f "$backup_path/.checksums.md5" ]; then
+        log INFO "Verifying checksums..."
+        
+        cd "$backup_path"
+        if md5sum -c .checksums.md5 &>/dev/null; then
+            log INFO "✓ Checksum verification passed"
+        else
+            log WARN "✗ Some checksums failed verification"
+        fi
+    fi
+    
+    log INFO "Backup integrity verification completed"
+    return 0
+}
+
+# Phase 3: Eradication & System Preparation
+phase3_eradication() {
+    alert "PHASE 3: ERADICATION & SYSTEM PREPARATION"
+    
+    log INFO "Preparing system for clean restoration..."
+    
+    # Step 1: Full malware scan
+    log INFO "Step 1/5: Running malware scan..."
+    run_malware_scan
+    
+    # Step 2: Remove persistence mechanisms
+    log INFO "Step 2/5: Checking for persistence mechanisms..."
+    check_persistence
+    
+    # Step 3: Patch vulnerabilities
+    log INFO "Step 3/5: Applying security patches..."
+    apply_security_patches
+    
+    # Step 4: Update security tools
+    log INFO "Step 4/5: Updating security tools..."
+    update_security_tools
+    
+    # Step 5: Prepare recovery environment
+    log INFO "Step 5/5: Preparing recovery environment..."
+    prepare_recovery_environment
+    
+    echo "- $(date): Eradication phase completed" >> "$INCIDENT_DIR/timeline.md"
+}
+
+# Run malware scan
+run_malware_scan() {
+    log INFO "Running ClamAV scan..."
+    
+    # Install ClamAV if not present
+    if ! command -v clamscan &>/dev/null; then
+        log INFO "Installing ClamAV..."
+        apt-get update -qq
+        apt-get install -y clamav clamav-daemon
+    fi
+    
+    # Update virus definitions
+    log INFO "Updating virus definitions..."
+    freshclam
+    
+    # Scan system
+    log INFO "Scanning system (this may take a while)..."
+    clamscan -r -i --log="$FORENSICS_DIR/malware_scan.log" / || true
+    
+    # Summary
+    local infected_files=$(grep "Infected files" "$FORENSICS_DIR/malware_scan.log" | awk '{print $3}')
+    
+    if [ "${infected_files:-0}" -gt 0 ]; then
+        log WARN "Found $infected_files infected files"
+        log WARN "Details in: $FORENSICS_DIR/malware_scan.log"
+    else
+        log INFO "No active malware detected"
+    fi
+}
+
+# Check for persistence mechanisms
+check_persistence() {
+    log INFO "Checking for malware persistence mechanisms..."
+    
+    # Check cron jobs
+    log INFO "Checking cron jobs..."
+    crontab -l > "$FORENSICS_DIR/crontab_backup.txt" 2>/dev/null || true
+    
+    # Check systemd services
+    log INFO "Checking systemd services..."
+    systemctl list-unit-files --state=enabled > "$FORENSICS_DIR/enabled_services.txt"
+    
+    # Check startup scripts
+    log INFO "Checking startup scripts..."
+    ls -la /etc/init.d/ > "$FORENSICS_DIR/init_scripts.txt"
+    
+    # Check .bashrc and similar
+    log INFO "Checking user profiles..."
+    find /home -name ".bashrc" -o -name ".bash_profile" -o -name ".profile" | \
+        xargs grep -l "curl\|wget\|nc\|/tmp" > "$FORENSICS_DIR/suspicious_profiles.txt" 2>/dev/null || true
+    
+    # Check for suspicious files in /tmp
+    log INFO "Checking /tmp directory..."
+    ls -la /tmp > "$FORENSICS_DIR/tmp_contents.txt"
+}
+
+# Apply security patches
+apply_security_patches() {
+    log INFO "Applying security patches..."
+    
+    # Update package lists
+    apt-get update -qq
+    
+    # Apply security updates
+    apt-get upgrade -y -qq --only-upgrade
+    
+    # Apply unattended upgrades
+    apt-get dist-upgrade -y -qq
+    
+    log INFO "Security patches applied"
+}
+
+# Update security tools
+update_security_tools() {
+    log INFO "Updating security tools..."
+    
+    # Update and enable firewall
+    apt-get install -y ufw
+    ufw --force enable
+    ufw default deny incoming
+    ufw default allow outgoing
+    ufw allow ssh
+    
+    # Enable fail2ban
+    apt-get install -y fail2ban
+    systemctl enable fail2ban
+    systemctl start fail2ban
+    
+    log INFO "Security tools updated and enabled"
+}
+
+# Prepare recovery environment
+prepare_recovery_environment() {
+    log INFO "Preparing recovery environment..."
+    
+    # Create recovery mount point
+    mkdir -p /mnt/recovery
+    
+    # Unmount any existing mounts
+    umount /mnt/recovery 2>/dev/null || true
+    
+    # Verify backup accessibility
+    if [ -n "$CLEAN_BACKUP_POINT" ]; then
+        if [ -d "$CLEAN_BACKUP_POINT" ]; then
+            log INFO "✓ Clean backup point is accessible"
+        else
+            log ERROR "✗ Clean backup point not accessible!"
+            return 1
+        fi
+    fi
+    
+    log INFO "Recovery environment ready"
+}
+
+# Phase 4: Recovery from Clean Backup
+phase4_recovery() {
+    alert "PHASE 4: RECOVERY FROM CLEAN BACKUP"
+    
+    if [ -z "$CLEAN_BACKUP_POINT" ]; then
+        alert "No clean backup point identified!"
+        log ERROR "Cannot proceed with recovery"
+        return 1
+    fi
+    
+    log INFO "Beginning recovery from: $CLEAN_BACKUP_POINT"
+    
+    # Create recovery plan
+    local recovery_plan="$INCIDENT_DIR/recovery_plan.txt"
+    cat > "$recovery_plan" <<PLAN
+Recovery Plan
+=============
+Restore Point: $CLEAN_BACKUP_POINT
+Recovery Time: $(date)
+
+Steps:
+1. Archive infected data for forensics
+2. Wipe affected partitions
+3. Restore system files
+4. Restore databases
+5. Restore application data
+6. Verify integrity
+7. Apply post-recovery hardening
+8. Resume services
+
+PLAN
+    
+    # Step 1: Archive infected data
+    log INFO "Step 1/8: Archiving infected data for forensics..."
+    archive_infected_data
+    
+    # Step 2: Wipe affected partitions (CAREFUL!)
+    log WARN "Step 2/8: Preparing to wipe affected partitions..."
+    log WARN "This is DESTRUCTIVE. Verify backups before proceeding!"
+    
+    # In production, add confirmation here
+    read -p "Type 'CONFIRM' to proceed with partition wipe: " confirm
+    if [ "$confirm" != "CONFIRM" ]; then
+        log INFO "Recovery aborted by user"
+        return 1
+    fi
+    
+    wipe_affected_partitions
+    
+    # Step 3: Restore system files
+    log INFO "Step 3/8: Restoring system files..."
+    restore_system_files
+    
+    # Step 4: Restore databases
+    log INFO "Step 4/8: Restoring databases..."
+    restore_databases
+    
+    # Step 5: Restore application data
+    log INFO "Step 5/8: Restoring application data..."
+    restore_application_data
+    
+    # Step 6: Verify integrity
+    log INFO "Step 6/8: Verifying data integrity..."
+    verify_restored_data
+    
+    # Step 7: Post-recovery hardening
+    log INFO "Step 7/8: Applying post-recovery hardening..."
+    post_recovery_hardening
+    
+    # Step 8: Resume services
+    log INFO "Step 8/8: Resuming services..."
+    resume_services
+    
+    echo "- $(date): Recovery phase completed" >> "$INCIDENT_DIR/timeline.md"
+}
+
+# Archive infected data
+archive_infected_data() {
+    log INFO "Archiving infected data for forensic analysis..."
+    
+    local forensic_archive="$FORENSICS_DIR/infected_data_$(date +%Y%m%d-%H%M%S).tar.gz"
+    
+    # Archive encrypted files and ransom notes
+    tar -czf "$forensic_archive" \
+        --ignore-failed-read \
+        $(find /data -type f \( -name "*.locked" -o -name "*.encrypted" -o -name "*DECRYPT*" \) 2>/dev/null | head -100) \
+        2>/dev/null || true
+    
+    log INFO "Forensic archive created: $forensic_archive"
+}
+
+# Wipe affected partitions
+wipe_affected_partitions() {
+    log WARN "Wiping affected partitions..."
+    
+    # Identify data partitions (example - adjust for your environment)
+    local data_partitions=("/data" "/var/www" "/home")
+    
+    for partition in "${data_partitions[@]}"; do
+        if [ -d "$partition" ]; then
+            log WARN "Wiping: $partition"
+            
+            # Remove all files
+            find "$partition" -mindepth 1 -delete 2>/dev/null || true
+            
+            log INFO "Wiped: $partition"
+        fi
+    done
+    
+    log WARN "Partition wipe completed"
+}
+
+# Restore system files
+restore_system_files() {
+    log INFO "Restoring system files from clean backup..."
+    
+    # Restore /etc configuration
+    if [ -d "$CLEAN_BACKUP_POINT/etc" ]; then
+        log INFO "Restoring /etc configuration..."
+        rsync -av "$CLEAN_BACKUP_POINT/etc/" /etc/
+    fi
+    
+    # Restore user profiles
+    if [ -d "$CLEAN_BACKUP_POINT/home" ]; then
+        log INFO "Restoring user profiles..."
+        rsync -av "$CLEAN_BACKUP_POINT/home/" /home/
+    fi
+    
+    log INFO "System files restored"
+}
+
+# Restore databases
+restore_databases() {
+    log INFO "Restoring databases from clean backup..."
+    
+    # MySQL
+    if [ -d "$BACKUP_ROOT/mysql/daily" ]; then
+        local mysql_backup=$(find "$BACKUP_ROOT/mysql/daily" -name "*.sql.gz" -type f | \
+            xargs ls -t | head -1)
+        
+        if [ -n "$mysql_backup" ]; then
+            # Get backup timestamp
+            local backup_time=$(stat -c %Y "$mysql_backup")
+            local infection_time=$(date -d "$infection_time" +%s 2>/dev/null || echo "999999999999")
+            
+            # Verify backup is before infection
+            if [ "$backup_time" -lt "$infection_time" ]; then
+                log INFO "Restoring MySQL from: $mysql_backup"
+                
+                systemctl start mysql
+                gunzip < "$mysql_backup" | mysql -u root
+                
+                log INFO "MySQL restored"
+            else
+                log ERROR "MySQL backup is after infection time!"
+            fi
+        fi
+    fi
+    
+    # PostgreSQL
+    if [ -d "$BACKUP_ROOT/postgresql" ]; then
+        local pg_backup=$(find "$BACKUP_ROOT/postgresql" -name "pg-*.sql.gz" -type f | \
+            xargs ls -t | head -1)
+        
+        if [ -n "$pg_backup" ]; then
+            log INFO "Restoring PostgreSQL from: $pg_backup"
+            
+            systemctl start postgresql
+            gunzip < "$pg_backup" | sudo -u postgres psql
+            
+            log INFO "PostgreSQL restored"
+        fi
+    fi
+}
+
+# Restore application data
+restore_application_data() {
+    log INFO "Restoring application data from clean backup..."
+    
+    # Restore web applications
+    if [ -d "$CLEAN_BACKUP_POINT/var/www" ]; then
+        log INFO "Restoring web applications..."
+        rsync -av "$CLEAN_BACKUP_POINT/var/www/" /var/www/
+    fi
+    
+    # Restore application data
+    if [ -d "$CLEAN_BACKUP_POINT/data" ]; then
+        log INFO "Restoring application data..."
+        rsync -av "$CLEAN_BACKUP_POINT/data/" /data/
+    fi
+    
+    log INFO "Application data restored"
+}
+
+# Verify restored data
+verify_restored_data() {
+    log INFO "Verifying restored data integrity..."
+    
+    # Check for ransom notes (should be none)
+    local ransom_check=$(find / -name "*DECRYPT*" -o -name "*RANSOM*" 2>/dev/null | wc -l)
+    
+    if [ "$ransom_check" -gt 0 ]; then
+        log ERROR "WARNING: Ransom notes still present after restore!"
+        return 1
+    else
+        log INFO "✓ No ransom notes found"
+    fi
+    
+    # Check for encrypted files
+    local encrypted_check=$(find /data -name "*.locked" -o -name "*.encrypted" 2>/dev/null | wc -l)
+    
+    if [ "$encrypted_check" -gt 0 ]; then
+        log ERROR "WARNING: Encrypted files still present after restore!"
+        return 1
+    else
+        log INFO "✓ No encrypted files found"
+    fi
+    
+    # Verify file counts match backup
+    local restored_count=$(find /data -type f 2>/dev/null | wc -l)
+    local backup_count=$(find "$CLEAN_BACKUP_POINT/data" -type f 2>/dev/null | wc -l)
+    
+    local diff=$((restored_count - backup_count))
+    local diff_abs=${diff#-}
+    
+    if [ "$diff_abs" -lt 100 ]; then
+        log INFO "✓ File count verification passed (diff: $diff)"
+    else
+        log WARN "File count mismatch: restored=$restored_count, backup=$backup_count"
+    fi
+    
+    log INFO "Data integrity verification completed"
+}
+
+# Post-recovery hardening
+post_recovery_hardening() {
+    log INFO "Applying post-recovery security hardening..."
+    
+    # Change all passwords
+    log INFO "Passwords must be changed for all accounts!"
+    
+    # Update SSH keys
+    log INFO "Regenerating SSH host keys..."
+    rm -f /etc/ssh/ssh_host_*
+    dpkg-reconfigure openssh-server
+    
+    # Enable additional security measures
+    log INFO "Enabling additional security measures..."
+    
+    # Configure AppArmor/SELinux
+    apt-get install -y apparmor apparmor-utils
+```

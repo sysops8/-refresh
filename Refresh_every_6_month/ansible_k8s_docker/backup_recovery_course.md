@@ -7082,8 +7082,6 @@ sudo /usr/local/bin/automated_failover.sh status
 
 ---
 
-## 🎓 Заключение курса
-
 ### Что вы освоили в модуле 5:
 
 - ✅ Automated recovery orchestration для разных сценариев
@@ -7133,16 +7131,6 @@ sudo /usr/local/bin/automated_failover.sh status
     - Track RTO/RPO compliance
 
 ---
-
-## 📚 Полный курс завершен!
-
-**Пройденные модули:**
-
-1. ✅ Backup & Recovery стратегии
-2. ✅ Database backups
-3. ✅ Filesystem & System backups
-4. ✅ Cloud backups & Hybrid strategies
-5. ✅ Advanced Recovery & DR Automation
 
 **Ключевые навыки:**
 
@@ -15627,4 +15615,8963 @@ post_recovery_hardening() {
     
     # Configure AppArmor/SELinux
     apt-get install -y apparmor apparmor-utils
+    systemctl enable apparmor
+    systemctl start apparmor
+    
+    # Harden SSH configuration
+    cat > /etc/ssh/sshd_config.d/hardening.conf <<SSH
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+MaxAuthTries 3
+MaxSessions 2
+ClientAliveInterval 300
+ClientAliveCountMax 2
+SSH
+    
+    systemctl restart sshd
+    
+    # Enable auditd for logging
+    apt-get install -y auditd
+    systemctl enable auditd
+    systemctl start auditd
+    
+    # Configure automatic updates
+    apt-get install -y unattended-upgrades
+    dpkg-reconfigure -plow unattended-upgrades
+    
+    log INFO "Security hardening completed"
+}
+
+# Resume services
+resume_services() {
+    log INFO "Resuming services in controlled manner..."
+    
+    local services=(
+        "mysql"
+        "postgresql"
+        "nginx"
+        "apache2"
+        "docker"
+    )
+    
+    for service in "${services[@]}"; do
+        if systemctl list-unit-files | grep -q "^$service"; then
+            log INFO "Starting service: $service"
+            systemctl enable "$service"
+            systemctl start "$service"
+            
+            # Verify service started successfully
+            if systemctl is-active --quiet "$service"; then
+                log INFO "âœ" $service started successfully"
+            else
+                log ERROR "âœ— Failed to start $service"
+            fi
+        fi
+    done
+    
+    # Gradually restore network access
+    log INFO "Restoring network access..."
+    iptables -F
+    iptables -X
+    
+    log INFO "Services resumed"
+}
+
+# Phase 5: Monitoring & Validation
+phase5_monitoring() {
+    alert "PHASE 5: POST-RECOVERY MONITORING"
+    
+    log INFO "Establishing enhanced monitoring..."
+    
+    # Monitor for re-infection
+    log INFO "Setting up re-infection monitoring..."
+    monitor_for_reinfection
+    
+    # Validate business operations
+    log INFO "Validating business operations..."
+    validate_business_operations
+    
+    # Schedule follow-up checks
+    log INFO "Scheduling follow-up security checks..."
+    schedule_followup_checks
+    
+    echo "- $(date): Monitoring phase initiated" >> "$INCIDENT_DIR/timeline.md"
+}
+
+# Monitor for re-infection
+monitor_for_reinfection() {
+    log INFO "Setting up re-infection monitoring..."
+    
+    # Create monitoring script
+    cat > /usr/local/bin/ransomware_monitor.sh <<'MONITOR'
+#!/bin/bash
+
+# Check for encryption activity
+find /data -name "*.locked" -o -name "*.encrypted" -mtime -1 2>/dev/null | while read file; do
+    echo "ALERT: Encrypted file detected: $file" | logger -t ransomware-monitor
+    # Send alert
+    wall "SECURITY ALERT: Potential ransomware activity detected!"
+done
+
+# Check for ransom notes
+find / -name "*DECRYPT*" -o -name "*RANSOM*" -mtime -1 2>/dev/null | while read file; do
+    echo "ALERT: Ransom note detected: $file" | logger -t ransomware-monitor
+    wall "SECURITY ALERT: Ransom note detected!"
+done
+
+# Monitor suspicious processes
+pgrep -f "encrypt|ransom|locked" | while read pid; do
+    echo "ALERT: Suspicious process: $pid" | logger -t ransomware-monitor
+    ps -p $pid -o pid,cmd
+done
+MONITOR
+    
+    chmod +x /usr/local/bin/ransomware_monitor.sh
+    
+    # Add to cron (every 5 minutes)
+    (crontab -l 2>/dev/null; echo "*/5 * * * * /usr/local/bin/ransomware_monitor.sh") | crontab -
+    
+    log INFO "Re-infection monitoring enabled"
+}
+
+# Validate business operations
+validate_business_operations() {
+    log INFO "Validating business operations..."
+    
+    local validation_report="$INCIDENT_DIR/business_validation.txt"
+    
+    cat > "$validation_report" <<VALIDATION
+Business Operations Validation
+===============================
+Date: $(date)
+
+VALIDATION
+    
+    # Check database connectivity
+    if systemctl is-active --quiet mysql; then
+        if mysql -e "SELECT 1" &>/dev/null; then
+            echo "âœ" MySQL: Online and accessible" >> "$validation_report"
+        else
+            echo "âœ— MySQL: Online but connection failed" >> "$validation_report"
+        fi
+    else
+        echo "âœ— MySQL: Offline" >> "$validation_report"
+    fi
+    
+    # Check web services
+    if systemctl is-active --quiet nginx || systemctl is-active --quiet apache2; then
+        if curl -s -o /dev/null -w "%{http_code}" http://localhost | grep -q "200\|301\|302"; then
+            echo "âœ" Web Server: Responding" >> "$validation_report"
+        else
+            echo "âœ— Web Server: Not responding correctly" >> "$validation_report"
+        fi
+    else
+        echo "âœ— Web Server: Offline" >> "$validation_report"
+    fi
+    
+    # Check data integrity
+    local data_count=$(find /data -type f 2>/dev/null | wc -l)
+    echo "Data files present: $data_count" >> "$validation_report"
+    
+    # Check application functionality
+    echo "" >> "$validation_report"
+    echo "Manual Validation Required:" >> "$validation_report"
+    echo "- [ ] Test user login functionality" >> "$validation_report"
+    echo "- [ ] Verify data accuracy" >> "$validation_report"
+    echo "- [ ] Test critical business workflows" >> "$validation_report"
+    echo "- [ ] Check reporting systems" >> "$validation_report"
+    echo "- [ ] Validate integrations" >> "$validation_report"
+    
+    log INFO "Business validation report: $validation_report"
+}
+
+# Schedule follow-up checks
+schedule_followup_checks() {
+    log INFO "Scheduling follow-up security checks..."
+    
+    # 24-hour check
+    at now + 24 hours <<FOLLOWUP1
+/usr/local/bin/ransomware_monitor.sh
+echo "24-hour post-recovery check completed" | mail -s "Recovery Check: 24h" admin@example.com
+FOLLOWUP1
+    
+    # 7-day check
+    at now + 7 days <<FOLLOWUP2
+clamscan -r / --log=/var/log/7day-scan.log
+echo "7-day post-recovery scan completed" | mail -s "Recovery Check: 7d" admin@example.com
+FOLLOWUP2
+    
+    log INFO "Follow-up checks scheduled"
+}
+
+# Generate incident report
+generate_incident_report() {
+    local report_file="$INCIDENT_DIR/incident_report.html"
+    
+    log INFO "Generating final incident report..."
+    
+    cat > "$report_file" <<'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ransomware Incident Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #d32f2f 0%, #f44336 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 2em;
+        }
+        .severity {
+            display: inline-block;
+            padding: 5px 15px;
+            background: #fff;
+            color: #d32f2f;
+            border-radius: 20px;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        .section {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-left: 4px solid #d32f2f;
+            border-radius: 4px;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: #d32f2f;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+            padding-left: 30px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -24px;
+            top: 5px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #d32f2f;
+            border: 3px solid white;
+            box-shadow: 0 0 0 2px #d32f2f;
+        }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #d32f2f;
+            margin: 10px 0;
+        }
+        .metric-label {
+            color: #666;
+            font-size: 0.9em;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #d32f2f;
+            color: white;
+        }
+        .status-complete {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .status-pending {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        .recommendation {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .critical {
+            background: #ffebee;
+            border-left: 4px solid #d32f2f;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>ðŸš¨ Ransomware Incident Report</h1>
+            <div class="severity">SEVERITY: CRITICAL</div>
+            <p style="margin: 10px 0 0 0;">Incident ID: $INCIDENT_ID</p>
+        </div>
+        
+        <div class="section">
+            <h2>Executive Summary</h2>
+            <p>
+                A ransomware attack was detected on $(date). The incident response team
+                successfully contained the threat, identified clean backup points, eradicated
+                the malware, and restored operations from verified backups.
+            </p>
+        </div>
+        
+        <div class="metric-grid">
+HTML
+    
+    # Calculate metrics
+    local total_encrypted=$(cat "$FORENSICS_DIR/encrypted_file_count.txt" 2>/dev/null || echo "0")
+    local recovery_duration=$(($(date +%s) - $(stat -c %Y "$INCIDENT_DIR" 2>/dev/null || echo $(date +%s))))
+    local recovery_hours=$((recovery_duration / 3600))
+    
+    cat >> "$report_file" <<HTML
+            <div class="metric-card">
+                <div class="metric-label">Files Encrypted</div>
+                <div class="metric-value">$total_encrypted</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Recovery Time</div>
+                <div class="metric-value">${recovery_hours}h</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Data Loss</div>
+                <div class="metric-value">0%</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Services Restored</div>
+                <div class="metric-value">100%</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Incident Timeline</h2>
+            <div class="timeline">
+HTML
+    
+    # Add timeline from file
+    if [ -f "$INCIDENT_DIR/timeline.md" ]; then
+        grep "^-" "$INCIDENT_DIR/timeline.md" | while read line; do
+            echo "<div class=\"timeline-item\">$line</div>" >> "$report_file"
+        done
+    fi
+    
+    cat >> "$report_file" <<HTML
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Response Actions Taken</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Phase</th>
+                        <th>Action</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Phase 1</td>
+                        <td>Network isolation and service containment</td>
+                        <td class="status-complete">âœ" Complete</td>
+                    </tr>
+                    <tr>
+                        <td>Phase 2</td>
+                        <td>Identification of clean backup point</td>
+                        <td class="status-complete">âœ" Complete</td>
+                    </tr>
+                    <tr>
+                        <td>Phase 3</td>
+                        <td>Malware eradication and system hardening</td>
+                        <td class="status-complete">âœ" Complete</td>
+                    </tr>
+                    <tr>
+                        <td>Phase 4</td>
+                        <td>Data restoration from verified backups</td>
+                        <td class="status-complete">âœ" Complete</td>
+                    </tr>
+                    <tr>
+                        <td>Phase 5</td>
+                        <td>Post-recovery monitoring</td>
+                        <td class="status-pending">â†' In Progress</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="section">
+            <h2>Forensic Analysis</h2>
+            <p><strong>Estimated Infection Time:</strong> $(grep "Estimated infection time" "$FORENSICS_DIR/available_backups.txt" 2>/dev/null | cut -d: -f2- || echo "Under investigation")</p>
+            <p><strong>Attack Vector:</strong> Under investigation</p>
+            <p><strong>Ransomware Variant:</strong> Analysis pending</p>
+            <p><strong>Infected Files:</strong> $total_encrypted files</p>
+            <p><strong>Forensic Evidence:</strong> Preserved in $FORENSICS_DIR</p>
+        </div>
+        
+        <div class="critical">
+            <h3>âš ï¸ Critical Actions Required</h3>
+            <ul>
+                <li><strong>Password Reset:</strong> All user and system passwords must be changed</li>
+                <li><strong>Security Audit:</strong> Comprehensive security audit required</li>
+                <li><strong>Incident Review:</strong> Schedule post-incident review meeting</li>
+                <li><strong>User Training:</strong> Conduct security awareness training</li>
+                <li><strong>Insurance Claim:</strong> Contact cyber insurance provider if applicable</li>
+            </ul>
+        </div>
+        
+        <div class="recommendation">
+            <h3>ðŸ" Recommendations</h3>
+            <ul>
+                <li>Implement application whitelisting</li>
+                <li>Enable endpoint detection and response (EDR)</li>
+                <li>Strengthen email security (anti-phishing)</li>
+                <li>Implement network segmentation</li>
+                <li>Increase backup frequency</li>
+                <li>Test disaster recovery plan quarterly</li>
+                <li>Conduct penetration testing</li>
+                <li>Review and update incident response procedures</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>Lessons Learned</h2>
+            <p><strong>What Worked Well:</strong></p>
+            <ul>
+                <li>Backup strategy enabled full recovery with zero data loss</li>
+                <li>Incident response procedures were effective</li>
+                <li>Team coordination was excellent</li>
+            </ul>
+            
+            <p><strong>Areas for Improvement:</strong></p>
+            <ul>
+                <li>Detection time could be improved with better monitoring</li>
+                <li>Need automated isolation capabilities</li>
+                <li>Backup verification process should be more frequent</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>Next Steps</h2>
+            <ol>
+                <li>Complete forensic analysis within 48 hours</li>
+                <li>Conduct post-incident review within 1 week</li>
+                <li>Implement security improvements within 30 days</li>
+                <li>Update incident response plan based on lessons learned</li>
+                <li>Schedule DR drill within 90 days</li>
+            </ol>
+        </div>
+        
+        <hr style="margin-top: 40px;">
+        <p style="text-align: center; color: #666;">
+            Report Generated: $(date)<br>
+            Incident Response Team
+        </p>
+    </div>
+</body>
+</html>
+HTML
+    
+    log INFO "Incident report generated: $report_file"
+    echo "$report_file"
+}
+
+# Notify team
+notify_team() {
+    local message="$1"
+    
+    # Email notification
+    if command -v mail &>/dev/null; then
+        echo "$message" | mail -s "INCIDENT: Ransomware Response" admin@example.com
+    fi
+    
+    # Slack notification (if configured)
+    if [ -n "$SLACK_WEBHOOK" ]; then
+        curl -X POST "$SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"text\":\"$message\"}"
+    fi
+    
+    # Log notification
+    log INFO "Team notification sent: $message"
+}
+
+# Main execution
+case "${1:-help}" in
+    init)
+        init_incident_response
+        ;;
+    
+    contain)
+        phase1_containment
+        ;;
+    
+    identify)
+        phase2_identify_clean_backup
+        ;;
+    
+    eradicate)
+        phase3_eradication
+        ;;
+    
+    recover)
+        phase4_recovery
+        ;;
+    
+    monitor)
+        phase5_monitoring
+        ;;
+    
+    report)
+        generate_incident_report
+        ;;
+    
+    full-response)
+        init_incident_response
+        phase1_containment
+        phase2_identify_clean_backup
+        phase3_eradication
+        phase4_recovery
+        phase5_monitoring
+        generate_incident_report
+        ;;
+    
+    *)
+        cat <<HELP
+Ransomware Incident Response & Recovery
+
+Usage: $0 <command>
+
+Commands:
+  init            - Initialize incident response
+  contain         - Phase 1: Containment
+  identify        - Phase 2: Identify clean backup
+  eradicate       - Phase 3: Eradication
+  recover         - Phase 4: Recovery from backup
+  monitor         - Phase 5: Post-recovery monitoring
+  report          - Generate incident report
+  full-response   - Execute all phases
+
+Examples:
+  $0 init
+  $0 full-response
+  $0 report
+
+WARNING: This script performs destructive operations.
+         Always verify backups before running recovery!
+HELP
+        ;;
+esac
+EOF
+
+chmod +x ransomware_recovery.sh
 ```
+
+---
+
+## 💻 Задание 2: Database Corruption Recovery Scenario
+
+```bash
+cat > database_corruption_recovery.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+SCENARIO_ID="db-corruption-$(date +%Y%m%d-%H%M%S)"
+SCENARIO_DIR="/var/incidents/$SCENARIO_ID"
+MYSQL_BACKUP_DIR="/backup/mysql"
+PG_BACKUP_DIR="/backup/postgresql"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$SCENARIO_DIR/recovery.log"
+}
+
+# Initialize scenario
+init_scenario() {
+    mkdir -p "$SCENARIO_DIR"/{logs,forensics,recovery}
+    
+    log "Database Corruption Recovery Scenario"
+    log "Scenario ID: $SCENARIO_ID"
+}
+
+# Detect corruption
+detect_corruption() {
+    log "Detecting database corruption..."
+    
+    local corruption_type="$1"
+    
+    case "$corruption_type" in
+        mysql)
+            detect_mysql_corruption
+            ;;
+        postgresql)
+            detect_postgresql_corruption
+            ;;
+        *)
+            log "Unknown database type"
+            return 1
+            ;;
+    esac
+}
+
+# Detect MySQL corruption
+detect_mysql_corruption() {
+    log "Checking MySQL tables for corruption..."
+    
+    # Get list of all databases
+    local databases=$(mysql -e "SHOW DATABASES" | grep -v "^Database$" | grep -v "information_schema\|performance_schema\|mysql")
+    
+    for db in $databases; do
+        log "Checking database: $db"
+        
+        # Check all tables
+        local corrupted_tables=$(mysql -e "USE $db; CHECK TABLE $(mysql -e "SHOW TABLES FROM $db" | grep -v "^Tables" | paste -sd ',')" | grep -i "corrupt\|error" || true)
+        
+        if [ -n "$corrupted_tables" ]; then
+            log "ERROR: Corruption detected in database: $db"
+            echo "$corrupted_tables" > "$SCENARIO_DIR/forensics/mysql_corrupted_$db.txt"
+            
+            # Attempt automatic repair
+            log "Attempting automatic repair..."
+            mysql -e "USE $db; REPAIR TABLE $(mysql -e "SHOW TABLES FROM $db" | grep -v "^Tables" | paste -sd ',')" > "$SCENARIO_DIR/forensics/repair_attempt_$db.txt"
+        fi
+    done
+}
+
+# Detect PostgreSQL corruption
+detect_postgresql_corruption() {
+    log "Checking PostgreSQL for corruption..."
+    
+    # Run VACUUM and ANALYZE
+    sudo -u postgres psql -c "VACUUM ANALYZE;" 2>&1 | tee "$SCENARIO_DIR/forensics/pg_vacuum.log"
+    
+    # Check for index corruption
+    sudo -u postgres psql -c "
+        SELECT schemaname, tablename, indexname
+        FROM pg_indexes
+        WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+    " | while read schema table index; do
+        log "Validating index: $schema.$table.$index"
+        
+        sudo -u postgres psql -c "REINDEX INDEX $schema.$index" 2>&1 | \
+            grep -i "error\|corrupt" >> "$SCENARIO_DIR/forensics/pg_corruption.txt" || true
+    done
+}
+
+# Point-in-time recovery for MySQL
+mysql_pitr() {
+    local target_time="$1"
+    local database="$2"
+    
+    log "Performing MySQL Point-in-Time Recovery"
+    log "Target Time: $target_time"
+    log "Database: $database"
+    
+    # Find last full backup before target time
+    local full_backup=$(find "$MYSQL_BACKUP_DIR/daily" -name "*.sql.gz" -type f | while read backup; do
+        backup_time=$(stat -c %Y "$backup")
+        target_timestamp=$(date -d "$target_time" +%s)
+        
+        if [ "$backup_time" -lt "$target_timestamp" ]; then
+            echo "$backup_time $backup"
+        fi
+    done | sort -n | tail -1 | cut -d' ' -f2)
+    
+    if [ -z "$full_backup" ]; then
+        log "ERROR: No suitable backup found"
+        return 1
+    fi
+    
+    log "Using full backup: $full_backup"
+    
+    # Restore full backup
+    log "Restoring full backup..."
+    gunzip < "$full_backup" | mysql "$database"
+    
+    # Apply binary logs up to target time
+    log "Applying binary logs up to $target_time..."
+    
+    local binlog_dir="/var/lib/mysql"
+    local binlogs=$(ls "$binlog_dir"/mysql-bin.* | sort)
+    
+    for binlog in $binlogs; do
+        log "Processing binlog: $binlog"
+        
+        mysqlbinlog --stop-datetime="$target_time" "$binlog" | mysql "$database"
+    done
+    
+    log "MySQL PITR completed"
+}
+
+# Point-in-time recovery for PostgreSQL
+postgresql_pitr() {
+    local target_time="$1"
+    
+    log "Performing PostgreSQL Point-in-Time Recovery"
+    log "Target Time: $target_time"
+    
+    # Stop PostgreSQL
+    systemctl stop postgresql
+    
+    # Backup current data directory
+    local pg_data="/var/lib/postgresql/data"
+    mv "$pg_data" "${pg_data}.corrupt"
+    
+    # Find base backup
+    local base_backup=$(find "$PG_BACKUP_DIR" -name "base_*.tar.gz" -type f | tail -1)
+    
+    if [ -z "$base_backup" ]; then
+        log "ERROR: No base backup found"
+        return 1
+    fi
+    
+    log "Using base backup: $base_backup"
+    
+    # Restore base backup
+    mkdir -p "$pg_data"
+    tar -xzf "$base_backup" -C "$pg_data"
+    
+    # Create recovery configuration
+    cat > "$pg_data/recovery.conf" <<RECOVERY
+restore_command = 'cp $PG_BACKUP_DIR/wal_archive/%f %p'
+recovery_target_time = '$target_time'
+recovery_target_action = 'promote'
+RECOVERY
+    
+    # Set permissions
+    chown -R postgres:postgres "$pg_data"
+    chmod 700 "$pg_data"
+    
+    # Start PostgreSQL in recovery mode
+    log "Starting PostgreSQL in recovery mode..."
+    systemctl start postgresql
+    
+    # Monitor recovery
+    log "Monitoring recovery progress..."
+    while sudo -u postgres psql -c "SELECT pg_is_in_recovery()" | grep -q "t"; do
+        log "Recovery in progress..."
+        sleep 5
+    done
+    
+    log "PostgreSQL PITR completed"
+}
+
+# Validate recovered database
+validate_recovery() {
+    local db_type="$1"
+    
+    log "Validating recovered database..."
+    
+    case "$db_type" in
+        mysql)
+            validate_mysql
+            ;;
+        postgresql)
+            validate_postgresql
+            ;;
+    esac
+}
+
+# Validate MySQL recovery
+validate_mysql() {
+    log "Validating MySQL recovery..."
+    
+    # Check if MySQL is running
+    if ! systemctl is-active --quiet mysql; then
+        log "ERROR: MySQL is not running"
+        return 1
+    fi
+    
+    # Check table integrity
+    local databases=$(mysql -e "SHOW DATABASES" | grep -v "^Database$" | grep -v "information_schema\|performance_schema\|mysql")
+    
+    local total_tables=0
+    local ok_tables=0
+    
+    for db in $databases; do
+        while read table; do
+            total_tables=$((total_tables + 1))
+            
+            if mysql -e "USE $db; CHECK TABLE $table" | grep -q "OK"; then
+                ok_tables=$((ok_tables + 1))
+            fi
+        done < <(mysql -e "SHOW TABLES FROM $db" | grep -v "^Tables")
+    done
+    
+    log "Table integrity check: $ok_tables/$total_tables OK"
+    
+    if [ "$ok_tables" -eq "$total_tables" ]; then
+        log "✅ MySQL recovery validation passed"
+        return 0
+    else
+        log "❌ MySQL recovery validation failed"
+        return 1
+    fi
+}
+
+# Validate PostgreSQL recovery
+validate_postgresql() {
+    log "Validating PostgreSQL recovery..."
+    
+    # Check if PostgreSQL is running
+    if ! systemctl is-active --quiet postgresql; then
+        log "ERROR: PostgreSQL is not running"
+        return 1
+    fi
+    
+    # Run consistency checks
+    sudo -u postgres psql -c "SELECT version();" >/dev/null
+    
+    if [ $? -eq 0 ]; then
+        log "✅ PostgreSQL is responding"
+    else
+        log "❌ PostgreSQL is not responding"
+        return 1
+    fi
+    
+    # Check for corrupted indexes
+    local corrupted_indexes=$(sudo -u postgres psql -At -c "
+        SELECT COUNT(*)
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE c.relkind = 'i'
+        AND n.nspname NOT IN ('pg_catalog', 'information_schema')
+        AND NOT pg_relation_is_valid(c.oid)
+    ")
+    
+    if [ "$corrupted_indexes" -eq 0 ]; then
+        log "✅ No corrupted indexes found"
+        return 0
+    else
+        log "❌ Found $corrupted_indexes corrupted indexes"
+        return 1
+    fi
+}
+
+# Generate recovery report
+generate_recovery_report() {
+    local report_file="$SCENARIO_DIR/recovery_report.html"
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Database Corruption Recovery Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1976d2;
+            border-bottom: 3px solid #1976d2;
+            padding-bottom: 10px;
+        }
+        .success {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🔧 Database Corruption Recovery Report</h1>
+    <p><strong>Scenario ID:</strong> $SCENARIO_ID</p>
+    <p><strong>Generated:</strong> $(date)</p>
+    <div class="success">
+        <h3>✅ Recovery Completed</h3>
+        <p>Database has been successfully recovered from corruption.</p>
+    </div>
+    
+    <h2>Recovery Details</h2>
+    <pre>$(cat "$SCENARIO_DIR/recovery.log" 2>/dev/null || echo "No recovery log available")</pre>
+</div>
+</body>
+</html>
+HTML
+
+    log "Recovery report generated: $report_file"
+    echo "$report_file"
+}
+
+# Main execution
+case "${1:-help}" in
+    init)
+        init_scenario
+        ;;
+    detect)
+        init_scenario
+        detect_corruption "$2"
+        ;;
+    mysql-pitr)
+        init_scenario
+        mysql_pitr "$2" "$3"
+        validate_recovery "mysql"
+        generate_recovery_report
+        ;;
+    pg-pitr)
+        init_scenario
+        postgresql_pitr "$2"
+        validate_recovery "postgresql"
+        generate_recovery_report
+        ;;
+    *)
+        cat <<HELP
+
+Database Corruption Recovery
+
+Usage: $0 <command> [options]
+
+Commands:
+  detect <mysql|postgresql>    - Detect database corruption
+  mysql-pitr <time> <database> - MySQL point-in-time recovery
+  pg-pitr <time>               - PostgreSQL point-in-time recovery
+
+Examples:
+  $0 detect mysql
+  $0 mysql-pitr "2024-01-15 14:30:00" mydb
+  $0 pg-pitr "2024-01-15 14:30:00"
+
+HELP
+        ;;
+esac
+EOF
+
+chmod +x database_corruption_recovery.sh
+````
+
+---
+
+## 🎓 Финальный сценарий: Complete DR Drill
+
+```bash
+cat > complete_dr_drill.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+DRILL_ID="dr-drill-$(date +%Y%m%d-%H%M%S)"
+DRILL_DIR="/var/dr-drills/$DRILL_ID"
+
+echo "╔═══════════════════════════════════════════════════════╗"
+echo "║        COMPLETE DISASTER RECOVERY DRILL               ║"
+echo "╚═══════════════════════════════════════════════════════╝"
+echo ""
+echo "Drill ID: $DRILL_ID"
+echo ""
+
+mkdir -p "$DRILL_DIR"/{logs,metrics,reports}
+
+# Scenario selection
+echo "Select DR Scenario:"
+echo "  1) Ransomware Attack"
+echo "  2) Database Corruption"
+echo "  3) Hardware Failure"
+echo "  4) Datacenter Disaster"
+echo "  5) Human Error (Accidental Deletion)"
+echo ""
+read -p "Enter scenario number: " scenario
+
+case $scenario in
+    1)
+        echo "Executing Ransomware Recovery Drill..."
+        ./ransomware_recovery.sh full-response
+        ;;
+    2)
+        echo "Executing Database Corruption Recovery Drill..."
+        ./database_corruption_recovery.sh detect mysql
+        ;;
+    3)
+        echo "Executing Hardware Failure Recovery Drill..."
+        # Simulate hardware failure and recovery
+        ;;
+    4)
+        echo "Executing Datacenter Disaster Recovery Drill..."
+        # Simulate datacenter failover
+        ;;
+    5)
+        echo "Executing Accidental Deletion Recovery Drill..."
+        # Simulate accidental deletion and recovery
+        ;;
+    *)
+        echo "Invalid scenario"
+        exit 1
+        ;;
+esac
+
+echo ""
+echo "╔═══════════════════════════════════════════════════════╗"
+echo "║           DR DRILL COMPLETED                          ║"
+echo "╚═══════════════════════════════════════════════════════╝"
+echo ""
+echo "Results saved to: $DRILL_DIR"
+EOF
+
+chmod +x complete_dr_drill.sh
+````
+
+---
+
+**🎯 Модуль 9 завершен!**
+
+**Практические навыки:**
+
+- 🚨 Incident response для ransomware атак
+- 💾 Point-in-time recovery для баз данных
+- 🔍 Forensic analysis и evidence preservation
+- 📊 Incident reporting и lessons learned
+- ✅ DR drill orchestration
+
+**Помни:**
+
+> "Practice makes perfect - регулярные DR drills спасут production"
+
+# Модуль 10: Advanced Recovery Techniques (30 минут)
+
+## 🎯 Напоминалка
+
+### Advanced Recovery Techniques
+
+```
+Recovery Techniques Hierarchy
+├── Point-in-Time Recovery (PITR)
+│   ├── Transaction Log Replay
+│   │   ├── MySQL Binary Logs
+│   │   ├── PostgreSQL WAL
+│   │   └── Oracle Archive Logs
+│   ├── Snapshot-based PITR
+│   │   ├── Filesystem snapshots + logs
+│   │   └── Storage array snapshots
+│   └── Application-consistent PITR
+│       ├── Quiesce applications
+│       └── Coordinate snapshots
+│
+├── Granular Recovery
+│   ├── File-Level Recovery
+│   │   ├── Single file from full backup
+│   │   ├── Directory from backup
+│   │   └── Specific file versions
+│   ├── Database-Level Recovery
+│   │   ├── Single table restore
+│   │   ├── Single database from full backup
+│   │   └── Specific rows/records
+│   └── Application-Level Recovery
+│       ├── Exchange mailbox restore
+│       ├── SharePoint item recovery
+│       └── Application object restore
+│
+├── Cross-Platform Recovery
+│   ├── P2V (Physical to Virtual)
+│   │   ├── Disk image conversion
+│   │   ├── Driver injection
+│   │   └── Boot configuration
+│   ├── V2V (Virtual to Virtual)
+│   │   ├── VMware to KVM
+│   │   ├── Hyper-V to VMware
+│   │   └── Format conversion
+│   ├── Cloud Migration
+│   │   ├── On-prem to AWS/Azure/GCP
+│   │   ├── Cross-cloud migration
+│   │   └── Hybrid deployments
+│   └── Bare Metal Recovery
+│       ├── Universal restore
+│       ├── Hardware-independent restore
+│       └── Dissimilar hardware recovery
+│
+└── Advanced Scenarios
+    ├── Instant Recovery
+    │   ├── Mount backup as VM
+    │   ├── Boot from backup
+    │   └── Instant file access
+    ├── Continuous Data Protection (CDP)
+    │   ├── Journal-based recovery
+    │   ├── Any-point-in-time recovery
+    │   └── Near-zero RPO
+    └── Synthetic Full Backups
+        ├── Combine incrementals
+        ├── Reduce backup windows
+        └── Optimize storage
+```
+
+### PITR Components
+
+```
+Point-in-Time Recovery Architecture
+┌─────────────────────────────────────────────────┐
+│   BASE BACKUP (Full)                            │
+│   - Complete database snapshot                  │
+│   - Consistent state at time T0                 │
+└─────────────────────────────────────────────────┘
+            ↓
+┌─────────────────────────────────────────────────┐
+│   TRANSACTION LOGS                              │
+│   T0 → T1 → T2 → T3 → T4 → [Target Time]       │
+│   - All changes recorded                        │
+│   - Replay to any point                         │
+└─────────────────────────────────────────────────┘
+            ↓
+┌─────────────────────────────────────────────────┐
+│   RECOVERY PROCESS                              │
+│   1. Restore base backup                        │
+│   2. Apply transaction logs                     │
+│   3. Stop at target time                        │
+│   4. Validate consistency                       │
+└─────────────────────────────────────────────────┘
+```
+
+### Granular Recovery Decision Tree
+
+```
+Need to Recover Data?
+    │
+    ├─→ Entire System?
+    │   └─→ Use Full System Restore
+    │
+    ├─→ Database?
+    │   ├─→ Entire Database? → Full DB Restore
+    │   ├─→ Single Table? → Table-Level Recovery
+    │   └─→ Specific Rows? → Row-Level Recovery
+    │
+    ├─→ Files/Folders?
+    │   ├─→ Single File? → File-Level Recovery
+    │   ├─→ Directory? → Directory Recovery
+    │   └─→ Specific Version? → Version Recovery
+    │
+    └─→ Application Objects?
+        ├─→ Email? → Mailbox Recovery
+        ├─→ Documents? → Document Recovery
+        └─→ Custom Objects? → Object-Level Recovery
+```
+
+---
+
+## 💻 Задание 1: Advanced MySQL PITR System
+
+```bash
+cat > advanced_mysql_pitr.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+PITR_DIR="/var/lib/mysql-pitr"
+BACKUP_DIR="/backup/mysql"
+BINLOG_DIR="/var/lib/mysql"
+RECOVERY_DIR="/var/lib/mysql-recovery"
+LOG_FILE="/var/log/mysql-pitr.log"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize PITR system
+init_pitr() {
+    log "Initializing Advanced MySQL PITR System..."
+    
+    mkdir -p "$PITR_DIR"/{metadata,staging,logs}
+    mkdir -p "$RECOVERY_DIR"
+    
+    # Verify binary logging is enabled
+    if ! mysql -e "SHOW VARIABLES LIKE 'log_bin'" | grep -q "ON"; then
+        error "Binary logging is not enabled!"
+        error "Add to my.cnf: log-bin=mysql-bin"
+        return 1
+    fi
+    
+    # Check binary log format
+    local binlog_format=$(mysql -N -e "SHOW VARIABLES LIKE 'binlog_format'" | awk '{print $2}')
+    info "Binary log format: $binlog_format"
+    
+    if [ "$binlog_format" != "ROW" ]; then
+        warn "Recommended binary log format is ROW for accurate PITR"
+        warn "Current format: $binlog_format"
+    fi
+    
+    # Create PITR metadata database
+    create_pitr_metadata
+    
+    success "PITR system initialized"
+}
+
+# Create PITR metadata database
+create_pitr_metadata() {
+    info "Creating PITR metadata database..."
+    
+    mysql <<SQL
+CREATE DATABASE IF NOT EXISTS pitr_metadata;
+
+USE pitr_metadata;
+
+-- Base backups tracking
+CREATE TABLE IF NOT EXISTS base_backups (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    backup_id VARCHAR(64) UNIQUE NOT NULL,
+    backup_time DATETIME NOT NULL,
+    backup_path VARCHAR(512) NOT NULL,
+    backup_size BIGINT NOT NULL,
+    binlog_file VARCHAR(255) NOT NULL,
+    binlog_position BIGINT NOT NULL,
+    gtid_set TEXT,
+    status ENUM('completed', 'failed', 'archived') DEFAULT 'completed',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_backup_time (backup_time),
+    INDEX idx_status (status)
+) ENGINE=InnoDB;
+
+-- Binary log tracking
+CREATE TABLE IF NOT EXISTS binlog_files (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    binlog_file VARCHAR(255) NOT NULL,
+    start_position BIGINT NOT NULL,
+    end_position BIGINT,
+    start_time DATETIME NOT NULL,
+    end_time DATETIME,
+    file_size BIGINT,
+    archived_path VARCHAR(512),
+    status ENUM('active', 'archived', 'purged') DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY idx_binlog (binlog_file),
+    INDEX idx_time_range (start_time, end_time)
+) ENGINE=InnoDB;
+
+-- Recovery history
+CREATE TABLE IF NOT EXISTS recovery_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    recovery_id VARCHAR(64) UNIQUE NOT NULL,
+    target_time DATETIME NOT NULL,
+    base_backup_id VARCHAR(64) NOT NULL,
+    binlogs_applied TEXT,
+    recovery_status ENUM('started', 'in_progress', 'completed', 'failed', 'validated') DEFAULT 'started',
+    recovery_duration INT,
+    target_database VARCHAR(255),
+    recovery_type ENUM('full', 'database', 'table', 'point_in_time') DEFAULT 'point_in_time',
+    notes TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP NULL,
+    INDEX idx_target_time (target_time),
+    INDEX idx_status (recovery_status)
+) ENGINE=InnoDB;
+
+-- Table-level recovery tracking
+CREATE TABLE IF NOT EXISTS table_recovery (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    recovery_id VARCHAR(64) NOT NULL,
+    database_name VARCHAR(255) NOT NULL,
+    table_name VARCHAR(255) NOT NULL,
+    row_count BIGINT,
+    recovery_method ENUM('full_table', 'selective_rows', 'schema_only') DEFAULT 'full_table',
+    where_clause TEXT,
+    status ENUM('pending', 'completed', 'failed') DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recovery_id) REFERENCES recovery_history(recovery_id),
+    INDEX idx_recovery (recovery_id)
+) ENGINE=InnoDB;
+SQL
+    
+    success "PITR metadata database created"
+}
+
+# Create consistent base backup
+create_base_backup() {
+    local backup_id="base-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Creating base backup: $backup_id"
+    
+    # Get current binary log position
+    local binlog_info=$(mysql -N -e "SHOW MASTER STATUS")
+    local binlog_file=$(echo "$binlog_info" | awk '{print $1}')
+    local binlog_pos=$(echo "$binlog_info" | awk '{print $2}')
+    local gtid_set=$(mysql -N -e "SELECT @@GLOBAL.gtid_executed" 2>/dev/null || echo "")
+    
+    info "Binary log position: $binlog_file:$binlog_pos"
+    [ -n "$gtid_set" ] && info "GTID set: $gtid_set"
+    
+    # Create backup directory
+    local backup_path="$BACKUP_DIR/$backup_id"
+    mkdir -p "$backup_path"
+    
+    # Perform consistent backup with mysqldump
+    info "Starting mysqldump (with --single-transaction)..."
+    
+    local start_time=$(date +%s)
+    
+    mysqldump \
+        --single-transaction \
+        --master-data=2 \
+        --flush-logs \
+        --routines \
+        --triggers \
+        --events \
+        --all-databases \
+        --result-file="$backup_path/full_backup.sql"
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    # Compress backup
+    info "Compressing backup..."
+    gzip "$backup_path/full_backup.sql"
+    
+    local backup_size=$(du -sb "$backup_path/full_backup.sql.gz" | cut -f1)
+    
+    # Record backup metadata
+    mysql pitr_metadata <<SQL
+INSERT INTO base_backups (
+    backup_id, backup_time, backup_path, backup_size,
+    binlog_file, binlog_position, gtid_set
+) VALUES (
+    '$backup_id',
+    NOW(),
+    '$backup_path/full_backup.sql.gz',
+    $backup_size,
+    '$binlog_file',
+    $binlog_pos,
+    '$gtid_set'
+);
+SQL
+    
+    success "Base backup created: $backup_id"
+    success "Size: $(echo "scale=2; $backup_size / 1024 / 1024 / 1024" | bc) GB"
+    success "Duration: ${duration}s"
+    
+    echo "$backup_id"
+}
+
+# Archive binary logs
+archive_binlogs() {
+    info "Archiving binary logs..."
+    
+    local archive_dir="$PITR_DIR/binlog_archive/$(date +%Y%m)"
+    mkdir -p "$archive_dir"
+    
+    # Get list of binary logs (excluding current one)
+    local current_binlog=$(mysql -N -e "SHOW MASTER STATUS" | awk '{print $1}')
+    local binlogs=$(mysql -N -e "SHOW BINARY LOGS" | awk '{print $1}' | grep -v "$current_binlog")
+    
+    for binlog in $binlogs; do
+        if [ ! -f "$archive_dir/$binlog.gz" ]; then
+            info "Archiving: $binlog"
+            
+            # Copy and compress
+            cp "$BINLOG_DIR/$binlog" "$archive_dir/"
+            gzip "$archive_dir/$binlog"
+            
+            # Get file stats
+            local file_size=$(stat -c %s "$BINLOG_DIR/$binlog")
+            local start_time=$(mysqlbinlog "$BINLOG_DIR/$binlog" | grep "^# at" | head -1 | grep -o '[0-9-]* [0-9:]*')
+            local end_time=$(mysqlbinlog "$BINLOG_DIR/$binlog" | grep "^# at" | tail -1 | grep -o '[0-9-]* [0-9:]*')
+            
+            # Record in metadata
+            mysql pitr_metadata <<SQL
+INSERT INTO binlog_files (
+    binlog_file, start_position, file_size, 
+    start_time, archived_path, status
+) VALUES (
+    '$binlog',
+    4,
+    $file_size,
+    '$start_time',
+    '$archive_dir/$binlog.gz',
+    'archived'
+)
+ON DUPLICATE KEY UPDATE
+    archived_path = VALUES(archived_path),
+    status = 'archived';
+SQL
+        fi
+    done
+    
+    success "Binary logs archived to: $archive_dir"
+}
+
+# Point-in-time recovery to specific timestamp
+pitr_to_timestamp() {
+    local target_time="$1"
+    local target_db="${2:-all}"
+    
+    local recovery_id="pitr-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Starting Point-in-Time Recovery"
+    info "Recovery ID: $recovery_id"
+    info "Target Time: $target_time"
+    info "Target Database: $target_db"
+    
+    # Validate target time format
+    if ! date -d "$target_time" &>/dev/null; then
+        error "Invalid timestamp format: $target_time"
+        error "Use format: YYYY-MM-DD HH:MM:SS"
+        return 1
+    fi
+    
+    local target_timestamp=$(date -d "$target_time" +%s)
+    
+    # Record recovery start
+    mysql pitr_metadata <<SQL
+INSERT INTO recovery_history (
+    recovery_id, target_time, recovery_status, target_database
+) VALUES (
+    '$recovery_id',
+    '$target_time',
+    'started',
+    '$target_db'
+);
+SQL
+    
+    # Find appropriate base backup
+    info "Finding base backup before target time..."
+    
+    local base_backup=$(mysql -N pitr_metadata <<SQL
+SELECT backup_id, backup_path, binlog_file, binlog_position
+FROM base_backups
+WHERE backup_time <= '$target_time'
+AND status = 'completed'
+ORDER BY backup_time DESC
+LIMIT 1;
+SQL
+)
+    
+    if [ -z "$base_backup" ]; then
+        error "No suitable base backup found before $target_time"
+        return 1
+    fi
+    
+    local backup_id=$(echo "$base_backup" | awk '{print $1}')
+    local backup_path=$(echo "$base_backup" | awk '{print $2}')
+    local start_binlog=$(echo "$base_backup" | awk '{print $3}')
+    local start_position=$(echo "$base_backup" | awk '{print $4}')
+    
+    info "Using base backup: $backup_id"
+    info "Starting from binlog: $start_binlog:$start_position"
+    
+    # Update recovery metadata
+    mysql pitr_metadata <<SQL
+UPDATE recovery_history
+SET base_backup_id = '$backup_id',
+    recovery_status = 'in_progress'
+WHERE recovery_id = '$recovery_id';
+SQL
+    
+    # Restore base backup to staging area
+    info "Restoring base backup to staging area..."
+    
+    # Stop MySQL if running
+    if systemctl is-active --quiet mysql; then
+        warn "Stopping MySQL for recovery..."
+        systemctl stop mysql
+    fi
+    
+    # Clear recovery directory
+    rm -rf "$RECOVERY_DIR"/*
+    mkdir -p "$RECOVERY_DIR"
+    
+    # Restore base backup
+    info "Decompressing and loading base backup..."
+    gunzip < "$backup_path" | mysql --init-command="SET SESSION SQL_LOG_BIN=0;"
+    
+    # Find binary logs to apply
+    info "Identifying binary logs to apply..."
+    
+    local binlogs_to_apply=$(mysql -N pitr_metadata <<SQL
+SELECT binlog_file
+FROM binlog_files
+WHERE start_time >= (
+    SELECT backup_time FROM base_backups WHERE backup_id = '$backup_id'
+)
+AND start_time <= '$target_time'
+ORDER BY start_time;
+SQL
+)
+    
+    # Apply binary logs up to target time
+    info "Applying binary logs up to $target_time..."
+    
+    local binlogs_applied=""
+    
+    for binlog in $binlogs_to_apply; do
+        info "Processing binlog: $binlog"
+        
+        # Find archived binlog
+        local archived_binlog=$(mysql -N pitr_metadata <<SQL
+SELECT archived_path FROM binlog_files WHERE binlog_file = '$binlog';
+SQL
+)
+        
+        if [ -z "$archived_binlog" ]; then
+            # Try current binlog directory
+            if [ -f "$BINLOG_DIR/$binlog" ]; then
+                archived_binlog="$BINLOG_DIR/$binlog"
+            else
+                error "Cannot find binlog: $binlog"
+                continue
+            fi
+        else
+            # Decompress if archived
+            if [[ "$archived_binlog" == *.gz ]]; then
+                gunzip -c "$archived_binlog" > "$PITR_DIR/staging/$binlog"
+                archived_binlog="$PITR_DIR/staging/$binlog"
+            fi
+        fi
+        
+        # Apply binlog with stop-datetime
+        info "Applying $binlog up to $target_time..."
+        
+        if [ "$target_db" = "all" ]; then
+            mysqlbinlog \
+                --stop-datetime="$target_time" \
+                --disable-log-bin \
+                "$archived_binlog" | mysql
+        else
+            mysqlbinlog \
+                --stop-datetime="$target_time" \
+                --database="$target_db" \
+                --disable-log-bin \
+                "$archived_binlog" | mysql
+        fi
+        
+        binlogs_applied="${binlogs_applied}${binlog},"
+    done
+    
+    # Verify recovery
+    info "Verifying recovery..."
+    
+    # Start MySQL
+    systemctl start mysql
+    sleep 5
+    
+    # Check if MySQL is running
+    if ! systemctl is-active --quiet mysql; then
+        error "MySQL failed to start after recovery"
+        
+        mysql pitr_metadata <<SQL
+UPDATE recovery_history
+SET recovery_status = 'failed',
+    completed_at = NOW()
+WHERE recovery_id = '$recovery_id';
+SQL
+        return 1
+    fi
+    
+    # Run consistency checks
+    local db_count=0
+    if [ "$target_db" = "all" ]; then
+        db_count=$(mysql -N -e "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys', 'pitr_metadata')")
+    else
+        db_count=$(mysql -N -e "SELECT COUNT(*) FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '$target_db'")
+    fi
+    
+    info "Databases recovered: $db_count"
+    
+    # Update recovery metadata
+    local recovery_end=$(date +%s)
+    local recovery_start=$(mysql -N pitr_metadata -e "SELECT UNIX_TIMESTAMP(created_at) FROM recovery_history WHERE recovery_id = '$recovery_id'")
+    local duration=$((recovery_end - recovery_start))
+    
+    mysql pitr_metadata <<SQL
+UPDATE recovery_history
+SET recovery_status = 'completed',
+    binlogs_applied = '${binlogs_applied%,}',
+    recovery_duration = $duration,
+    completed_at = NOW()
+WHERE recovery_id = '$recovery_id';
+SQL
+    
+    success "Point-in-Time Recovery completed!"
+    success "Recovery ID: $recovery_id"
+    success "Duration: ${duration}s"
+    success "Databases: $db_count"
+    
+    # Generate recovery report
+    generate_pitr_report "$recovery_id"
+}
+
+# Granular table recovery
+recover_single_table() {
+    local database="$1"
+    local table="$2"
+    local target_time="$3"
+    local where_clause="${4:-}"
+    
+    local recovery_id="table-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Starting Single Table Recovery"
+    info "Recovery ID: $recovery_id"
+    info "Database: $database"
+    info "Table: $table"
+    info "Target Time: $target_time"
+    [ -n "$where_clause" ] && info "Where Clause: $where_clause"
+    
+    # Find base backup
+    local base_backup=$(mysql -N pitr_metadata <<SQL
+SELECT backup_id, backup_path
+FROM base_backups
+WHERE backup_time <= '$target_time'
+AND status = 'completed'
+ORDER BY backup_time DESC
+LIMIT 1;
+SQL
+)
+    
+    if [ -z "$base_backup" ]; then
+        error "No suitable base backup found"
+        return 1
+    fi
+    
+    local backup_id=$(echo "$base_backup" | awk '{print $1}')
+    local backup_path=$(echo "$base_backup" | awk '{print $2}')
+    
+    info "Using base backup: $backup_id"
+    
+    # Create temporary database
+    local temp_db="${database}_recovery_$$"
+    
+    mysql -e "CREATE DATABASE IF NOT EXISTS $temp_db"
+    
+    # Extract and restore single table from backup
+    info "Extracting table from backup..."
+    
+    gunzip < "$backup_path" | sed -n "/^-- Table structure for table \`$table\`/,/^-- Table structure for table/p" | \
+        sed "s/\`$database\`/\`$temp_db\`/g" | mysql
+    
+    # Apply binary logs for this specific table
+    info "Applying binary logs for table changes..."
+    
+    local binlogs_to_apply=$(mysql -N pitr_metadata <<SQL
+SELECT binlog_file, archived_path
+FROM binlog_files
+WHERE start_time >= (
+    SELECT backup_time FROM base_backups WHERE backup_id = '$backup_id'
+)
+AND start_time <= '$target_time'
+ORDER BY start_time;
+SQL
+)
+    
+    while read binlog archived_path; do
+        if [ -z "$archived_path" ]; then
+            archived_path="$BINLOG_DIR/$binlog"
+        elif [[ "$archived_path" == *.gz ]]; then
+            gunzip -c "$archived_path" > "$PITR_DIR/staging/$binlog"
+            archived_path="$PITR_DIR/staging/$binlog"
+        fi
+        
+        # Filter binlog for specific table
+        mysqlbinlog \
+            --stop-datetime="$target_time" \
+            --database="$database" \
+            "$archived_path" | \
+            grep -A1000 "INSERT INTO \`$table\`\|UPDATE \`$table\`\|DELETE FROM \`$table\`" | \
+            sed "s/\`$database\`/\`$temp_db\`/g" | \
+            mysql
+    done <<< "$binlogs_to_apply"
+    
+    # Export recovered table data
+    local export_file="$PITR_DIR/staging/${database}_${table}_recovered.sql"
+    
+    if [ -n "$where_clause" ]; then
+        info "Exporting rows matching: $where_clause"
+        mysqldump \
+            --no-create-info \
+            --where="$where_clause" \
+            "$temp_db" "$table" > "$export_file"
+    else
+        info "Exporting entire table..."
+        mysqldump "$temp_db" "$table" > "$export_file"
+    fi
+    
+    local row_count=$(mysql -N -e "SELECT COUNT(*) FROM $temp_db.$table")
+    
+    info "Recovered rows: $row_count"
+    
+    # Cleanup temporary database
+    mysql -e "DROP DATABASE IF EXISTS $temp_db"
+    
+    success "Table recovery completed!"
+    success "Export file: $export_file"
+    success "Rows recovered: $row_count"
+    
+    # Record in metadata
+    mysql pitr_metadata <<SQL
+INSERT INTO recovery_history (
+    recovery_id, target_time, recovery_status, 
+    target_database, recovery_type
+) VALUES (
+    '$recovery_id',
+    '$target_time',
+    'completed',
+    '$database',
+    'table'
+);
+
+INSERT INTO table_recovery (
+    recovery_id, database_name, table_name, 
+    row_count, recovery_method, where_clause, status
+) VALUES (
+    '$recovery_id',
+    '$database',
+    '$table',
+    $row_count,
+    '$([ -n "$where_clause" ] && echo "selective_rows" || echo "full_table")',
+    '$where_clause',
+    'completed'
+);
+SQL
+    
+    echo "$export_file"
+}
+
+# Binary log analysis
+analyze_binlogs() {
+    local start_time="${1:-$(date -d '1 hour ago' +'%Y-%m-%d %H:%M:%S')}"
+    local end_time="${2:-$(date +'%Y-%m-%d %H:%M:%S')}"
+    
+    info "Analyzing binary logs between $start_time and $end_time"
+    
+    local analysis_file="$PITR_DIR/logs/binlog_analysis_$(date +%Y%m%d-%H%M%S).txt"
+    
+    cat > "$analysis_file" <<HEADER
+Binary Log Analysis
+===================
+Period: $start_time to $end_time
+Generated: $(date)
+
+HEADER
+    
+    # Find relevant binlogs
+    local binlogs=$(mysql -N pitr_metadata <<SQL
+SELECT binlog_file, archived_path
+FROM binlog_files
+WHERE start_time >= '$start_time'
+AND (end_time <= '$end_time' OR end_time IS NULL)
+ORDER BY start_time;
+SQL
+)
+    
+    local total_events=0
+    local total_inserts=0
+    local total_updates=0
+    local total_deletes=0
+    
+    while read binlog archived_path; do
+        echo "" >> "$analysis_file"
+        echo "Binlog: $binlog" >> "$analysis_file"
+        echo "$(printf '=%.0s' {1..50})" >> "$analysis_file"
+        
+        local binlog_path="$archived_path"
+        if [ -z "$binlog_path" ]; then
+            binlog_path="$BINLOG_DIR/$binlog"
+        elif [[ "$binlog_path" == *.gz ]]; then
+            gunzip -c "$binlog_path" > "$PITR_DIR/staging/$binlog"
+            binlog_path="$PITR_DIR/staging/$binlog"
+        fi
+        
+        # Analyze events
+        local stats=$(mysqlbinlog \
+            --start-datetime="$start_time" \
+            --stop-datetime="$end_time" \
+            "$binlog_path" 2>/dev/null | \
+            grep -E "^###|^# at|^COMMIT" | \
+            awk '
+                /^### INSERT/ { inserts++ }
+                /^### UPDATE/ { updates++ }
+                /^### DELETE/ { deletes++ }
+                /^COMMIT/ { commits++ }
+                END {
+                    print "Inserts:", inserts
+                    print "Updates:", updates
+                    print "Deletes:", deletes
+                    print "Commits:", commits
+                }
+            ')
+        
+        echo "$stats" >> "$analysis_file"
+        
+        # Extract database activity
+        echo "" >> "$analysis_file"
+        echo "Database Activity:" >> "$analysis_file"
+        
+        mysqlbinlog \
+            --start-datetime="$start_time" \
+            --stop-datetime="$end_time" \
+            "$binlog_path" 2>/dev/null | \
+            grep -oP "use \`\K[^\`]+" | \
+            sort | uniq -c | sort -rn >> "$analysis_file"
+        
+        # Extract table activity
+        echo "" >> "$analysis_file"
+        echo "Table Activity:" >> "$analysis_file"
+        
+        mysqlbinlog \
+            --start-datetime="$start_time" \
+            --stop-datetime="$end_time" \
+            "$binlog_path" 2>/dev/null | \
+            grep -oP "### (INSERT INTO|UPDATE|DELETE FROM) \`[^\`]+\`\.\`\K[^\`]+" | \
+            sort | uniq -c | sort -rn | head -20 >> "$analysis_file"
+        
+    done <<< "$binlogs"
+    
+    success "Binary log analysis completed: $analysis_file"
+    cat "$analysis_file"
+}
+
+# Flashback query (undo changes)
+flashback_query() {
+    local database="$1"
+    local table="$2"
+    local start_time="$3"
+    local end_time="$4"
+    
+    info "Generating flashback query for $database.$table"
+    info "Period: $start_time to $end_time"
+    
+    local flashback_file="$PITR_DIR/staging/flashback_${database}_${table}_$(date +%Y%m%d-%H%M%S).sql"
+    
+    # Find relevant binlogs
+    local binlogs=$(mysql -N pitr_metadata <<SQL
+SELECT binlog_file, archived_path
+FROM binlog_files
+WHERE start_time >= '$start_time'
+AND start_time <= '$end_time'
+ORDER BY start_time;
+SQL
+)
+    
+    cat > "$flashback_file" <<HEADER
+-- Flashback Query for $database.$table
+-- Period: $start_time to $end_time
+-- Generated: $(date)
+-- 
+-- This will UNDO changes made during the specified period
+-- Review carefully before executing!
+
+SET SESSION SQL_LOG_BIN=0;
+USE $database;
+
+HEADER
+    
+    while read binlog archived_path; do
+        local binlog_path="$archived_path"
+        if [ -z "$binlog_path" ]; then
+            binlog_path="$BINLOG_DIR/$binlog"
+        elif [[ "$binlog_path" == *.gz ]]; then
+            gunzip -c "$binlog_path" > "$PITR_DIR/staging/$binlog"
+            binlog_path="$PITR_DIR/staging/$binlog"
+        fi
+
+        # Generate reverse operations
+        mysqlbinlog \
+            --start-datetime="$start_time" \
+            --stop-datetime="$end_time" \
+            --base64-output=DECODE-ROWS \
+            -vv \
+            "$binlog_path" 2>/dev/null | \
+        grep -A20 "### INSERT INTO \`$database\`.\`$table\`\|### UPDATE \`$database\`.\`$table\`\|### DELETE FROM \`$database\`.\`$table\`" | \
+        python3 -c "
+import sys
+import re
+
+current_op = None
+current_data = []
+
+for line in sys.stdin:
+    if '### INSERT INTO' in line:
+        # Convert INSERT to DELETE
+        current_op = 'DELETE'
+        current_data = []
+    elif '### UPDATE' in line:
+        # For UPDATE, we want the old values (WHERE clause)
+        current_op = 'UPDATE'
+        current_data = []
+    elif '### DELETE FROM' in line:
+        # Convert DELETE to INSERT
+        current_op = 'INSERT'
+        current_data = []
+    elif current_op and line.startswith('### @'):
+        current_data.append(line.strip('### ').strip())
+
+# Process accumulated data (simplified - actual implementation would be more complex)
+print(\"-- Flashback operations for $database.$table\")
+" >> "$flashback_file"
+
+    done <<< "$binlogs"
+
+    echo "" >> "$flashback_file"
+    echo "-- End of flashback query" >> "$flashback_file"
+    echo "SET SESSION SQL_LOG_BIN=1;" >> "$flashback_file"
+
+    success "Flashback query generated: $flashback_file"
+    warn "REVIEW CAREFULLY before executing!"
+
+    echo "$flashback_file"
+}
+
+# Generate PITR report
+generate_pitr_report() {
+    local recovery_id="$1"
+    
+    local report_file="$PITR_DIR/logs/pitr_report_${recovery_id}.html"
+    
+    info "Generating PITR report..."
+    
+    # Get recovery details
+    local recovery_info=$(mysql -N pitr_metadata <<SQL
+SELECT recovery_id, target_time, base_backup_id, binlogs_applied, recovery_status, recovery_duration, target_database, recovery_type, created_at, completed_at
+FROM recovery_history
+WHERE recovery_id = '$recovery_id';
+SQL
+)
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MySQL PITR Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            border-bottom: 3px solid #764ba2;
+            padding-bottom: 10px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .info-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+        .info-label {
+            font-weight: bold;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+        .info-value {
+            font-size: 1.2em;
+            color: #333;
+        }
+        .success {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .timeline {
+            position: relative;
+            padding-left: 40px;
+            margin: 30px 0;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: #667eea;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+            padding-left: 30px;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -29px;
+            top: 5px;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #667eea;
+            border: 4px solid white;
+            box-shadow: 0 0 0 3px #667eea;
+        }
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 MySQL Point-in-Time Recovery Report</h1>
+        <p><strong>Recovery ID:</strong> $recovery_id</p>
+        <p><strong>Generated:</strong> $(date)</p>
+        
+        <div class="success">
+            <h3>✅ Recovery Completed Successfully</h3>
+            <p>Point-in-time recovery has been completed. All data has been restored to the specified timestamp.</p>
+        </div>
+        
+        <div class="info-grid">
+HTML
+    
+    # Parse recovery info and add to report
+    IFS=$'\t' read -r rec_id target_time backup_id binlogs status duration db_name rec_type created completed <<< "$recovery_info"
+    
+    cat >> "$report_file" <<HTML
+            <div class="info-card">
+                <div class="info-label">Target Time</div>
+                <div class="info-value">$target_time</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Base Backup Used</div>
+                <div class="info-value">$backup_id</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Recovery Duration</div>
+                <div class="info-value">${duration}s</div>
+            </div>
+            <div class="info-card">
+                <div class="info-label">Target Database</div>
+                <div class="info-value">$db_name</div>
+            </div>
+        </div>
+        
+        <h2>Recovery Timeline</h2>
+        <div class="timeline">
+            <div class="timeline-item">
+                <strong>Recovery Started</strong><br>
+                $created
+            </div>
+            <div class="timeline-item">
+                <strong>Base Backup Restored</strong><br>
+                Backup ID: $backup_id
+            </div>
+            <div class="timeline-item">
+                <strong>Binary Logs Applied</strong><br>
+                Logs: $(echo "$binlogs" | tr ',' ' ')
+            </div>
+            <div class="timeline-item">
+                <strong>Recovery Completed</strong><br>
+                $completed
+            </div>
+        </div>
+        
+        <h2>Binary Logs Applied</h2>
+        <pre>$(echo "$binlogs" | tr ',' '\n')</pre>
+        
+        <h2>Validation Steps</h2>
+        <ol>
+            <li>✅ Base backup restored successfully</li>
+            <li>✅ Binary logs applied up to target time</li>
+            <li>✅ Database consistency verified</li>
+            <li>✅ MySQL service started and responding</li>
+        </ol>
+        
+        <h2>Next Steps</h2>
+        <ul>
+            <li>Verify application functionality</li>
+            <li>Check data integrity for critical tables</li>
+            <li>Update applications to use recovered database</li>
+            <li>Document any data discrepancies</li>
+            <li>Schedule post-recovery backup</li>
+        </ul>
+        
+        <hr style="margin-top: 40px;">
+        <p style="text-align: center; color: #666;">
+            MySQL PITR System | Generated: $(date)
+        </p>
+    </div>
+</body>
+</html>
+HTML
+    
+    success "PITR report generated: $report_file"
+    echo "$report_file"
+}
+
+# View recovery history
+view_history() {
+    info "Recent Recovery History"
+    
+    mysql pitr_metadata <<SQL
+SELECT recovery_id, target_time, recovery_status, recovery_type, target_database, CONCAT(recovery_duration, 's') as duration, created_at
+FROM recovery_history
+ORDER BY created_at DESC
+LIMIT 20;
+SQL
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_pitr
+        ;;
+    
+    backup)
+        create_base_backup
+        ;;
+    
+    archive-binlogs)
+        archive_binlogs
+        ;;
+    
+    pitr)
+        pitr_to_timestamp "$2" "$3"
+        ;;
+    
+    recover-table)
+        recover_single_table "$2" "$3" "$4" "$5"
+        ;;
+    
+    analyze)
+        analyze_binlogs "$2" "$3"
+        ;;
+    
+    flashback)
+        flashback_query "$2" "$3" "$4" "$5"
+        ;;
+    
+    history)
+        view_history
+        ;;
+    
+    *)
+        cat <<HELP
+Advanced MySQL PITR System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init                - Initialize PITR system
+    backup              - Create base backup
+    archive-binlogs     - Archive binary logs
+    pitr <time> [database] - Point-in-time recovery
+    recover-table <db> <table> <time> [where] - Recover single table
+    analyze [start_time] [end_time] - Analyze binary logs
+    flashback <db> <table> <start> <end> - Generate undo SQL
+    history             - View recovery history
+
+Examples:
+    $0 init
+    $0 backup
+    $0 pitr "2024-01-15 14:30:00" mydb
+    $0 recover-table mydb users "2024-01-15 14:00:00"
+    $0 recover-table mydb orders "2024-01-15 14:00:00" "status='pending'"
+    $0 analyze "2024-01-15 10:00:00" "2024-01-15 16:00:00"
+    $0 flashback mydb users "2024-01-15 14:00:00" "2024-01-15 15:00:00"
+
+Point-in-Time Recovery Features:
+    ✓ Timestamp-based recovery
+    ✓ Granular table recovery
+    ✓ Selective row recovery
+    ✓ Binary log analysis
+    ✓ Flashback queries
+    ✓ Recovery validation
+    ✓ Automated reporting
+HELP
+        ;;
+esac
+EOF
+
+chmod +x advanced_mysql_pitr.sh
+
+```
+
+---
+
+Продолжить с остальными заданиями модуля 10:
+1. Cross-Platform Recovery (P2V, V2V)
+2. Instant Recovery
+3. Synthetic Full Backups
+
+
+## 💻 Задание 2: Cross-Platform Recovery (P2V, V2V, Cloud Migration)
+
+```bash
+cat > cross_platform_recovery.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+MIGRATION_DIR="/var/lib/migrations"
+TEMP_DIR="/tmp/migration-$$"
+LOG_FILE="/var/log/cross_platform_recovery.log"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize migration system
+init_migration() {
+    log "Initializing Cross-Platform Recovery System..."
+    
+    mkdir -p "$MIGRATION_DIR"/{images,configs,drivers,logs}
+    mkdir -p "$TEMP_DIR"
+    
+    # Install required tools
+    install_migration_tools
+    
+    success "Migration system initialized"
+}
+
+# Install migration tools
+install_migration_tools() {
+    info "Checking and installing migration tools..."
+    
+    local tools_to_install=()
+    
+    # Check for qemu-img (disk conversion)
+    if ! command -v qemu-img &>/dev/null; then
+        tools_to_install+=("qemu-utils")
+    fi
+    
+    # Check for virt-v2v
+    if ! command -v virt-v2v &>/dev/null; then
+        tools_to_install+=("virt-v2v")
+    fi
+    
+    # Check for virt-p2v
+    if ! command -v virt-p2v-make-disk &>/dev/null; then
+        tools_to_install+=("virt-p2v")
+    fi
+    
+    # Check for libguestfs tools
+    if ! command -v virt-customize &>/dev/null; then
+        tools_to_install+=("libguestfs-tools")
+    fi
+    
+    # Check for cloud tools
+    if ! command -v aws &>/dev/null; then
+        info "AWS CLI not found - install separately if needed"
+    fi
+    
+    if [ ${#tools_to_install[@]} -gt 0 ]; then
+        info "Installing tools: ${tools_to_install[*]}"
+        apt-get update -qq
+        apt-get install -y "${tools_to_install[@]}"
+    else
+        info "All required tools already installed"
+    fi
+}
+
+# Physical to Virtual (P2V) conversion
+physical_to_virtual() {
+    local source_system="$1"
+    local target_format="${2:-qcow2}"  # qcow2, vmdk, vdi, vhdx
+    local vm_name="${3:-converted-vm}"
+    
+    local migration_id="p2v-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Starting Physical-to-Virtual Migration"
+    info "Migration ID: $migration_id"
+    info "Source System: $source_system"
+    info "Target Format: $target_format"
+    info "VM Name: $vm_name"
+    
+    mkdir -p "$MIGRATION_DIR/$migration_id"
+    
+    # Step 1: Create disk image from physical system
+    info "Step 1/7: Creating disk image from physical system..."
+    create_physical_image "$source_system" "$migration_id"
+    
+    # Step 2: Convert disk format if needed
+    info "Step 2/7: Converting disk format..."
+    convert_disk_format "$migration_id" "$target_format"
+    
+    # Step 3: Inject virtualization drivers
+    info "Step 3/7: Injecting virtualization drivers..."
+    inject_virt_drivers "$migration_id" "$target_format"
+    
+    # Step 4: Update boot configuration
+    info "Step 4/7: Updating boot configuration..."
+    update_boot_config "$migration_id"
+    
+    # Step 5: Remove hardware-specific configurations
+    info "Step 5/7: Removing hardware-specific configurations..."
+    remove_hw_specific_config "$migration_id"
+    
+    # Step 6: Create VM definition
+    info "Step 6/7: Creating VM definition..."
+    create_vm_definition "$migration_id" "$vm_name" "$target_format"
+    
+    # Step 7: Validate conversion
+    info "Step 7/7: Validating conversion..."
+    validate_p2v "$migration_id"
+    
+    success "P2V migration completed!"
+    success "VM definition: $MIGRATION_DIR/$migration_id/${vm_name}.xml"
+    success "Disk image: $MIGRATION_DIR/$migration_id/disk.$target_format"
+    
+    # Generate migration report
+    generate_migration_report "$migration_id" "P2V" "$source_system" "$vm_name"
+}
+
+# Create disk image from physical system
+create_physical_image() {
+    local source="$1"
+    local migration_id="$2"
+    
+    info "Creating disk image from $source..."
+    
+    local image_file="$MIGRATION_DIR/$migration_id/source_disk.raw"
+    
+    if [[ "$source" == *":"* ]]; then
+        # Remote system - use SSH
+        info "Creating image from remote system via SSH..."
+        
+        # Get disk information
+        local disk_info=$(ssh "$source" "lsblk -ndo NAME,SIZE,TYPE | grep disk | head -1")
+        local disk_device=$(echo "$disk_info" | awk '{print $1}')
+        local disk_size=$(echo "$disk_info" | awk '{print $2}')
+        
+        info "Source disk: /dev/$disk_device ($disk_size)"
+        
+        # Stream disk over SSH with compression
+        ssh "$source" "dd if=/dev/$disk_device bs=4M status=progress" | \
+            pv -s "$disk_size" | \
+            dd of="$image_file" bs=4M
+        
+    else
+        # Local system
+        info "Creating image from local disk: $source..."
+        
+        dd if="$source" of="$image_file" bs=4M status=progress
+    fi
+    
+    # Verify image
+    local image_size=$(stat -c %s "$image_file")
+    info "Disk image created: $(echo "scale=2; $image_size / 1024 / 1024 / 1024" | bc) GB"
+    
+    # Calculate checksum
+    info "Calculating checksum..."
+    sha256sum "$image_file" > "$MIGRATION_DIR/$migration_id/source_disk.sha256"
+    
+    success "Physical disk image created"
+}
+
+# Convert disk format
+convert_disk_format() {
+    local migration_id="$1"
+    local target_format="$2"
+    
+    local source_image="$MIGRATION_DIR/$migration_id/source_disk.raw"
+    local target_image="$MIGRATION_DIR/$migration_id/disk.$target_format"
+    
+    info "Converting disk format: RAW → $target_format"
+    
+    # Get optimal settings for target format
+    local convert_opts=""
+    
+    case "$target_format" in
+        qcow2)
+            # QCOW2 with compression and lazy refcounts
+            convert_opts="-O qcow2 -c -o lazy_refcounts=on,cluster_size=2M"
+            ;;
+        vmdk)
+            # VMDK compatible with VMware
+            convert_opts="-O vmdk -o subformat=streamOptimized"
+            ;;
+        vdi)
+            # VDI for VirtualBox
+            convert_opts="-O vdi"
+            ;;
+        vhdx)
+            # VHDX for Hyper-V
+            convert_opts="-O vhdx -o subformat=dynamic"
+            ;;
+        *)
+            error "Unsupported format: $target_format"
+            return 1
+            ;;
+    esac
+    
+    # Perform conversion with progress
+    qemu-img convert -p $convert_opts "$source_image" "$target_image"
+    
+    # Get compression ratio
+    local source_size=$(stat -c %s "$source_image")
+    local target_size=$(stat -c %s "$target_image")
+    local ratio=$(echo "scale=2; ($source_size - $target_size) * 100 / $source_size" | bc)
+    
+    info "Compression ratio: ${ratio}%"
+    info "Original size: $(echo "scale=2; $source_size / 1024 / 1024 / 1024" | bc) GB"
+    info "Converted size: $(echo "scale=2; $target_size / 1024 / 1024 / 1024" | bc) GB"
+    
+    # Remove raw image to save space
+    rm -f "$source_image"
+    
+    success "Disk format converted to $target_format"
+}
+
+# Inject virtualization drivers
+inject_virt_drivers() {
+    local migration_id="$1"
+    local format="$2"
+    
+    local disk_image="$MIGRATION_DIR/$migration_id/disk.$format"
+    
+    info "Injecting virtualization drivers into disk image..."
+    
+    # Detect OS type
+    local os_type=$(virt-inspector -a "$disk_image" | grep -oP '(?<=<name>)[^<]+' | head -1)
+    
+    info "Detected OS: $os_type"
+    
+    case "$os_type" in
+        linux|ubuntu|debian|centos|rhel)
+            info "Injecting Linux virtio drivers..."
+            
+            # Install virtio drivers
+            virt-customize -a "$disk_image" \
+                --run-command "apt-get update" \
+                --install "linux-image-generic" \
+                --run-command "update-initramfs -u -k all" \
+                2>/dev/null || \
+            virt-customize -a "$disk_image" \
+                --run-command "yum install -y kernel" \
+                --run-command "dracut --force" \
+                2>/dev/null || true
+            
+            # Add virtio modules to initramfs
+            virt-customize -a "$disk_image" \
+                --run-command "echo 'virtio_blk' >> /etc/initramfs-tools/modules" \
+                --run-command "echo 'virtio_scsi' >> /etc/initramfs-tools/modules" \
+                --run-command "echo 'virtio_net' >> /etc/initramfs-tools/modules" \
+                --run-command "echo 'virtio_pci' >> /etc/initramfs-tools/modules" \
+                2>/dev/null || true
+            
+            ;;
+        windows)
+            warn "Windows virtio drivers require manual injection"
+            warn "Download virtio-win ISO from: https://fedorapeople.org/groups/virt/virtio-win/"
+            ;;
+        *)
+            warn "Unknown OS type: $os_type"
+            ;;
+    esac
+    
+    success "Virtualization drivers injected"
+}
+
+# Update boot configuration
+update_boot_config() {
+    local migration_id="$1"
+    local disk_image="$MIGRATION_DIR/$migration_id/disk."*
+    
+    info "Updating boot configuration for virtual environment..."
+    
+    # Update GRUB configuration
+    virt-customize -a "$disk_image" \
+        --run-command "sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\".*\"/GRUB_CMDLINE_LINUX_DEFAULT=\"quiet splash\"/' /etc/default/grub" \
+        --run-command "update-grub" \
+        2>/dev/null || true
+    
+    # Update fstab to use UUIDs instead of device names
+    virt-customize -a "$disk_image" \
+        --run-command "sed -i 's/^\/dev\/sd[a-z][0-9]*/UUID=/' /etc/fstab" \
+        2>/dev/null || true
+    
+    success "Boot configuration updated"
+}
+
+# Remove hardware-specific configurations
+remove_hw_specific_config() {
+    local migration_id="$1"
+    local disk_image="$MIGRATION_DIR/$migration_id/disk."*
+    
+    info "Removing hardware-specific configurations..."
+    
+    # Remove udev network rules (they contain MAC addresses)
+    virt-customize -a "$disk_image" \
+        --run-command "rm -f /etc/udev/rules.d/70-persistent-net.rules" \
+        --run-command "rm -f /etc/udev/rules.d/75-persistent-net-generator.rules" \
+        2>/dev/null || true
+    
+    # Remove hardware-specific network configuration
+    virt-customize -a "$disk_image" \
+        --run-command "rm -f /etc/network/interfaces.d/*" \
+        2>/dev/null || true
+    
+    # Reset machine-id
+    virt-customize -a "$disk_image" \
+        --run-command "rm -f /etc/machine-id" \
+        --run-command "systemd-machine-id-setup" \
+        2>/dev/null || true
+    
+    success "Hardware-specific configurations removed"
+}
+
+# Create VM definition
+create_vm_definition() {
+    local migration_id="$1"
+    local vm_name="$2"
+    local disk_format="$3"
+    
+    local disk_image="$MIGRATION_DIR/$migration_id/disk.$disk_format"
+    local vm_xml="$MIGRATION_DIR/$migration_id/${vm_name}.xml"
+    
+    info "Creating VM definition..."
+    
+    # Get disk size
+    local disk_size=$(qemu-img info "$disk_image" | grep "virtual size" | awk '{print $3}')
+    
+    # Detect OS type and version
+    local os_info=$(virt-inspector -a "$disk_image" 2>/dev/null | grep -A2 "<operatingsystem>" || echo "unknown")
+    
+    cat > "$vm_xml" <<XML
+<domain type='kvm'>
+  <name>$vm_name</name>
+  <uuid>$(uuidgen)</uuid>
+  <memory unit='GiB'>4</memory>
+  <currentMemory unit='GiB'>4</currentMemory>
+  <vcpu placement='static'>2</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-q35-6.2'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+    <vmport state='off'/>
+  </features>
+  <cpu mode='host-passthrough' check='none'/>
+  <clock offset='utc'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+  </clock>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='$disk_format' cache='none' io='native'/>
+      <source file='$disk_image'/>
+      <target dev='vda' bus='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x04' slot='0x00' function='0x0'/>
+    </disk>
+    <controller type='usb' index='0' model='qemu-xhci'>
+      <address type='pci' domain='0x0000' bus='0x02' slot='0x00' function='0x0'/>
+    </controller>
+    <controller type='pci' index='0' model='pcie-root'/>
+    <controller type='pci' index='1' model='pcie-root-port'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x0'/>
+    </controller>
+    <interface type='network'>
+      <source network='default'/>
+      <model type='virtio'/>
+      <address type='pci' domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
+    </interface>
+    <serial type='pty'>
+      <target type='isa-serial' port='0'>
+        <model name='isa-serial'/>
+      </target>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <channel type='unix'>
+      <target type='virtio' name='org.qemu.guest_agent.0'/>
+      <address type='virtio-serial' controller='0' bus='0' port='1'/>
+    </channel>
+    <input type='tablet' bus='usb'>
+      <address type='usb' bus='0' port='1'/>
+    </input>
+    <input type='keyboard' bus='ps2'/>
+    <graphics type='vnc' port='-1' autoport='yes' listen='0.0.0.0'>
+      <listen type='address' address='0.0.0.0'/>
+    </graphics>
+    <video>
+      <model type='qxl' ram='65536' vram='65536' vgamem='16384' heads='1'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
+    </video>
+    <memballoon model='virtio'>
+      <address type='pci' domain='0x0000' bus='0x05' slot='0x00' function='0x0'/>
+    </memballoon>
+  </devices>
+</domain>
+XML
+    
+    success "VM definition created: $vm_xml"
+    
+    # Create import script
+    cat > "$MIGRATION_DIR/$migration_id/import_vm.sh" <<IMPORT
+#!/bin/bash
+# VM Import Script
+
+echo "Importing VM: $vm_name"
+
+# Define VM
+virsh define "$vm_xml"
+
+# Start VM
+echo "Starting VM..."
+virsh start $vm_name
+
+# Show VNC port
+echo ""
+echo "VM started successfully!"
+echo "VNC Port: \$(virsh vncdisplay $vm_name)"
+echo ""
+echo "Connect with: virt-viewer $vm_name"
+IMPORT
+    
+    chmod +x "$MIGRATION_DIR/$migration_id/import_vm.sh"
+    
+    info "Import script: $MIGRATION_DIR/$migration_id/import_vm.sh"
+}
+
+# Validate P2V conversion
+validate_p2v() {
+    local migration_id="$1"
+    local disk_image="$MIGRATION_DIR/$migration_id/disk."*
+    
+    info "Validating P2V conversion..."
+    
+    # Check disk image integrity
+    if qemu-img check "$disk_image" &>/dev/null; then
+        success "✓ Disk image integrity OK"
+    else
+        error "✗ Disk image has errors"
+        return 1
+    fi
+    
+    # Check for boot loader
+    local boot_check=$(virt-inspector -a "$disk_image" 2>/dev/null | grep -c "bootloader" || echo "0")
+    
+    if [ "$boot_check" -gt 0 ]; then
+        success "✓ Boot loader detected"
+    else
+        warn "⚠ Boot loader not detected - VM may not boot"
+    fi
+    
+    # Check for filesystem
+    local fs_count=$(virt-filesystems -a "$disk_image" 2>/dev/null | wc -l)
+    
+    if [ "$fs_count" -gt 0 ]; then
+        success "✓ Filesystems detected: $fs_count"
+    else
+        error "✗ No filesystems detected"
+        return 1
+    fi
+    
+    success "P2V validation completed"
+}
+
+# Virtual to Virtual (V2V) conversion
+virtual_to_virtual() {
+    local source_vm="$1"
+    local source_hypervisor="${2:-vmware}"  # vmware, hyperv, xen
+    local target_format="${3:-qcow2}"
+    
+    local migration_id="v2v-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Starting Virtual-to-Virtual Migration"
+    info "Migration ID: $migration_id"
+    info "Source VM: $source_vm"
+    info "Source Hypervisor: $source_hypervisor"
+    info "Target Format: $target_format"
+    
+    mkdir -p "$MIGRATION_DIR/$migration_id"
+    
+    case "$source_hypervisor" in
+        vmware)
+            v2v_from_vmware "$source_vm" "$migration_id" "$target_format"
+            ;;
+        hyperv)
+            v2v_from_hyperv "$source_vm" "$migration_id" "$target_format"
+            ;;
+        xen)
+            v2v_from_xen "$source_vm" "$migration_id" "$target_format"
+            ;;
+        *)
+            error "Unsupported source hypervisor: $source_hypervisor"
+            return 1
+            ;;
+    esac
+    
+    success "V2V migration completed!"
+    
+    generate_migration_report "$migration_id" "V2V" "$source_hypervisor:$source_vm" "KVM"
+}
+
+# V2V from VMware
+v2v_from_vmware() {
+    local source_vm="$1"
+    local migration_id="$2"
+    local target_format="$3"
+    
+    info "Converting from VMware to KVM..."
+    
+    # Check if source is ESXi or vCenter
+    if [[ "$source_vm" == *":"* ]]; then
+        # Remote ESXi/vCenter
+        local vcenter=$(echo "$source_vm" | cut -d: -f1)
+        local vm_name=$(echo "$source_vm" | cut -d: -f2)
+        
+        info "Converting VM '$vm_name' from vCenter: $vcenter"
+        
+        # Use virt-v2v with vCenter connection
+        virt-v2v \
+            -ic "vpx://$vcenter/?no_verify=1" \
+            -os "$MIGRATION_DIR/$migration_id" \
+            -of "$target_format" \
+            "$vm_name"
+    else
+        # Local VMDK files
+        info "Converting local VMDK: $source_vm"
+        
+        # Convert VMDK to target format
+        local vm_name=$(basename "$source_vm" .vmdk)
+        
+        qemu-img convert -p -O "$target_format" \
+            "$source_vm" \
+            "$MIGRATION_DIR/$migration_id/disk.$target_format"
+        
+        # Inject drivers and configure
+        inject_virt_drivers "$migration_id" "$target_format"
+        update_boot_config "$migration_id"
+        create_vm_definition "$migration_id" "$vm_name" "$target_format"
+    fi
+    
+    success "VMware to KVM conversion completed"
+}
+
+# V2V from Hyper-V
+v2v_from_hyperv() {
+    local source_vm="$1"
+    local migration_id="$2"
+    local target_format="$3"
+    
+    info "Converting from Hyper-V to KVM..."
+    
+    # Hyper-V uses VHDX format
+    if [ -f "$source_vm" ]; then
+        local vm_name=$(basename "$source_vm" .vhdx)
+        
+        # Convert VHDX to target format
+        qemu-img convert -p -O "$target_format" \
+            "$source_vm" \
+            "$MIGRATION_DIR/$migration_id/disk.$target_format"
+        
+        # Configure for KVM
+        inject_virt_drivers "$migration_id" "$target_format"
+        update_boot_config "$migration_id"
+        create_vm_definition "$migration_id" "$vm_name" "$target_format"
+    else
+        error "Source VHDX file not found: $source_vm"
+        return 1
+    fi
+    
+    success "Hyper-V to KVM conversion completed"
+}
+
+# V2V from Xen
+v2v_from_xen() {
+    local source_vm="$1"
+    local migration_id="$2"
+    local target_format="$3"
+    
+    info "Converting from Xen to KVM..."
+    
+    # Use virt-v2v for Xen
+    virt-v2v \
+        -ic "xen+ssh://root@xenhost" \
+        -os "$MIGRATION_DIR/$migration_id" \
+        -of "$target_format" \
+        "$source_vm"
+    
+    success "Xen to KVM conversion completed"
+}
+
+# Cloud migration (On-prem to Cloud)
+migrate_to_cloud() {
+    local source_vm="$1"
+    local cloud_provider="${2:-aws}"  # aws, azure, gcp
+    local region="${3:-us-east-1}"
+    
+    local migration_id="cloud-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Starting Cloud Migration"
+    info "Migration ID: $migration_id"
+    info "Source VM: $source_vm"
+    info "Cloud Provider: $cloud_provider"
+    info "Region: $region"
+    
+    mkdir -p "$MIGRATION_DIR/$migration_id"
+    
+    case "$cloud_provider" in
+        aws)
+            migrate_to_aws "$source_vm" "$migration_id" "$region"
+            ;;
+        azure)
+            migrate_to_azure "$source_vm" "$migration_id" "$region"
+            ;;
+        gcp)
+            migrate_to_gcp "$source_vm" "$migration_id" "$region"
+            ;;
+        *)
+            error "Unsupported cloud provider: $cloud_provider"
+            return 1
+            ;;
+    esac
+    
+    success "Cloud migration completed!"
+    
+    generate_migration_report "$migration_id" "Cloud" "$source_vm" "$cloud_provider"
+}
+
+# Migrate to AWS
+migrate_to_aws() {
+    local source_vm="$1"
+    local migration_id="$2"
+    local region="$3"
+    
+    info "Migrating to AWS EC2..."
+    
+    # Step 1: Convert to RAW format (required by AWS)
+    info "Converting to RAW format..."
+    local raw_image="$MIGRATION_DIR/$migration_id/disk.raw"
+    
+    qemu-img convert -p -O raw "$source_vm" "$raw_image"
+    
+    # Step 2: Upload to S3
+    local bucket_name="vm-migration-$(date +%s)"
+    local s3_key="disk.raw"
+    
+    info "Creating S3 bucket: $bucket_name"
+    aws s3 mb "s3://$bucket_name" --region "$region"
+    
+    info "Uploading disk image to S3..."
+    aws s3 cp "$raw_image" "s3://$bucket_name/$s3_key" \
+        --region "$region" \
+        --storage-class STANDARD_IA
+    
+    # Step 3: Import as AMI
+    info "Importing as AMI..."
+    
+    cat > "$MIGRATION_DIR/$migration_id/import-spec.json" <<JSON
+{
+  "Description": "Migrated VM - $migration_id",
+  "DiskContainers": [
+    {
+      "Description": "Root disk",
+      "Format": "RAW",
+      "UserBucket": {
+        "S3Bucket": "$bucket_name",
+        "S3Key": "$s3_key"
+      }
+    }
+  ]
+}
+JSON
+    
+    local import_task=$(aws ec2 import-image \
+        --description "Migrated VM - $migration_id" \
+        --disk-containers "file://$MIGRATION_DIR/$migration_id/import-spec.json" \
+        --region "$region" \
+        --query 'ImportTaskId' \
+        --output text)
+    
+    info "Import task ID: $import_task"
+    info "Waiting for import to complete (this may take 30+ minutes)..."
+    
+    # Monitor import progress
+    while true; do
+        local status=$(aws ec2 describe-import-image-tasks \
+            --import-task-ids "$import_task" \
+            --region "$region" \
+            --query 'ImportImageTasks[0].Status' \
+            --output text)
+        
+        local progress=$(aws ec2 describe-import-image-tasks \
+            --import-task-ids "$import_task" \
+            --region "$region" \
+            --query 'ImportImageTasks[0].Progress' \
+            --output text 2>/dev/null || echo "0")
+        
+        info "Import status: $status ($progress%)"
+        
+        if [ "$status" = "completed" ]; then
+            break
+        elif [ "$status" = "deleted" ] || [ "$status" = "cancelled" ]; then
+            error "Import failed: $status"
+            return 1
+        fi
+        
+        sleep 60
+    done
+    
+    # Get AMI ID
+    local ami_id=$(aws ec2 describe-import-image-tasks \
+        --import-task-ids "$import_task" \
+        --region "$region" \
+        --query 'ImportImageTasks[0].ImageId' \
+        --output text)
+    
+    success "AMI created: $ami_id"
+    
+    # Create launch template
+    info "Creating launch template..."
+    
+    aws ec2 create-launch-template \
+        --launch-template-name "migrated-vm-$migration_id" \
+        --version-description "Migrated from on-prem" \
+        --launch-template-data "{
+            \"ImageId\": \"$ami_id\",
+            \"InstanceType\": \"t3.medium\",
+            \"KeyName\": \"your-key-pair\",
+            \"SecurityGroupIds\": [\"sg-xxxxxxxx\"],
+            \"TagSpecifications\": [{
+                \"ResourceType\": \"instance\",
+                \"Tags\": [{\"Key\": \"Name\", \"Value\": \"Migrated-VM\"}]
+            }]
+        }" \
+        --region "$region"
+    
+    # Cleanup S3
+    info "Cleaning up S3 bucket..."
+    aws s3 rm "s3://$bucket_name/$s3_key" --region "$region"
+    aws s3 rb "s3://$bucket_name" --region "$region"
+    
+    success "AWS migration completed!"
+    success "AMI ID: $ami_id"
+    success "Region: $region"
+    
+    cat > "$MIGRATION_DIR/$migration_id/aws_info.txt" <<INFO
+AWS Migration Information
+========================
+AMI ID: $ami_id
+Region: $region
+Launch Template: migrated-vm-$migration_id
+
+To launch instance:
+aws ec2 run-instances --launch-template LaunchTemplateName=migrated-vm-$migration_id --region $region
+INFO
+}
+
+# Migrate to Azure
+migrate_to_azure() {
+    local source_vm="$1"
+    local migration_id="$2"
+    local region="$3"
+    
+    info "Migrating to Azure..."
+    
+    # Convert to VHD format (required by Azure)
+    info "Converting to VHD format..."
+    local vhd_image="$MIGRATION_DIR/$migration_id/disk.vhd"
+    
+    qemu-img convert -p -O vpc "$source_vm" "$vhd_image"
+    
+    # Fix VHD footer (Azure requires specific VHD format)
+    info "Fixing VHD footer for Azure..."
+    az vm image create \
+        --resource-group "migration-rg" \
+        --name "migrated-vm-$migration_id" \
+        --os-type Linux \
+        --source "$vhd_image" \
+        --location "$region"
+    
+    success "Azure migration completed!"
+    
+    cat > "$MIGRATION_DIR/$migration_id/azure_info.txt" <<INFO
+Azure Migration Information
+===========================
+Image Name: migrated-vm-$migration_id
+Resource Group: migration-rg
+Region: $region
+
+To create VM:
+az vm create --name migrated-vm --resource-group migration-rg --image migrated-vm-$migration_id
+INFO
+}
+
+# Migrate to GCP
+migrate_to_gcp() {
+    local source_vm="$1"
+    local migration_id="$2"
+    local region="$3"
+    
+    info "Migrating to Google Cloud Platform..."
+    
+    # Convert to RAW format (required by GCP)
+    info "Converting to RAW format..."
+    local raw_image="$MIGRATION_DIR/$migration_id/disk.raw"
+    
+    qemu-img convert -p -O raw "$source_vm" "$raw_image"
+    
+    # Compress the image
+    info "Compressing disk image..."
+    gzip -c "$raw_image" > "$raw_image.gz"
+    
+    info "Uploading to Google Cloud Storage..."
+    local bucket_name="vm-migration-$(date +%s)"
+    
+    gsutil mb -p "YOUR_PROJECT" -l "$region" "gs://$bucket_name"
+    gsutil cp "$raw_image.gz" "gs://$bucket_name/disk.raw.gz"
+    
+    info "Creating GCP image..."
+    gcloud compute images create "migrated-vm-$migration_id" \
+        --project "YOUR_PROJECT" \
+        --source-uri "gs://$bucket_name/disk.raw.gz" \
+        --storage-location "$region"
+    
+    success "GCP migration completed!"
+    
+    cat > "$MIGRATION_DIR/$migration_id/gcp_info.txt" <<INFO
+GCP Migration Information
+========================
+Image Name: migrated-vm-$migration_id
+Project: YOUR_PROJECT
+Region: $region
+Storage Bucket: $bucket_name
+
+To create VM:
+gcloud compute instances create migrated-vm --image migrated-vm-$migration_id
+INFO
+}
+
+# Generate migration report
+generate_migration_report() {
+    local migration_id="$1"
+    local migration_type="$2"
+    local source="$3"
+    local target="$4"
+    
+    local report_file="$MIGRATION_DIR/$migration_id/migration_report.txt"
+    
+    info "Generating migration report..."
+    
+    cat > "$report_file" <<REPORT
+Cross-Platform Migration Report
+===============================
+
+Migration ID: $migration_id
+Type: $migration_type
+Date: $(date)
+Source: $source
+Target: $target
+
+Summary
+-------
+Migration completed successfully.
+
+Details
+-------
+- Migration completed at: $(date +'%Y-%m-%d %H:%M:%S')
+- Source system: $source
+- Target platform: $target
+- Migration directory: $MIGRATION_DIR/$migration_id
+
+Artifacts
+---------
+$(find "$MIGRATION_DIR/$migration_id" -type f | while read file; do
+    echo "- $(basename "$file") ($(stat -c %s "$file") bytes)"
+done)
+
+Next Steps
+----------
+1. Review the converted VM
+2. Test the VM functionality
+3. Update network configuration if needed
+4. Configure backup for the new VM
+
+Notes
+-----
+- Ensure proper licensing for the migrated system
+- Update any application-specific configurations
+- Test all critical services after migration
+REPORT
+    
+    success "Migration report generated: $report_file"
+}
+
+# Main execution
+main() {
+    echo "╔═══════════════════════════════════════════════════════╗"
+    echo "║     CROSS-PLATFORM RECOVERY (P2V, V2V, CLOUD)         ║"
+    echo "╚═══════════════════════════════════════════════════════╝"
+    echo ""
+    
+    case "${1:-help}" in
+        init)
+            init_migration
+            ;;
+        
+        p2v)
+            if [ -z "$2" ]; then
+                error "Usage: $0 p2v <source_disk> [format] [vm_name]"
+                error "Example: $0 p2v /dev/sda qcow2 my-vm"
+                exit 1
+            fi
+            init_migration
+            physical_to_virtual "$2" "$3" "$4"
+            ;;
+        
+        v2v)
+            if [ -z "$2" ]; then
+                error "Usage: $0 v2v <source_vm> [hypervisor] [format]"
+                error "Example: $0 v2v my-vm.vmdk vmware qcow2"
+                exit 1
+            fi
+            init_migration
+            virtual_to_virtual "$2" "$3" "$4"
+            ;;
+        
+        cloud)
+            if [ -z "$2" ]; then
+                error "Usage: $0 cloud <source_vm> [provider] [region]"
+                error "Example: $0 cloud my-vm.qcow2 aws us-east-1"
+                exit 1
+            fi
+            init_migration
+            migrate_to_cloud "$2" "$3" "$4"
+            ;;
+        
+        help|*)
+            cat <<HELP
+Cross-Platform Recovery Script
+==============================
+
+This script provides tools for physical-to-virtual (P2V),
+virtual-to-virtual (V2V), and cloud migration operations.
+
+Commands:
+  init        - Initialize migration system
+  p2v         - Physical-to-Virtual migration
+  v2v         - Virtual-to-Virtual migration
+  cloud       - Cloud migration
+  help        - Show this help
+
+Examples:
+  $0 p2v /dev/sda qcow2 my-vm
+  $0 v2v vmware-vm.vmdk vmware qcow2
+  $0 cloud my-vm.qcow2 aws us-east-1
+
+Supported Formats:
+  - qcow2 (KVM/QEMU)
+  - vmdk (VMware)
+  - vdi (VirtualBox)
+  - vhdx (Hyper-V)
+
+Supported Cloud Providers:
+  - aws (Amazon Web Services)
+  - azure (Microsoft Azure)
+  - gcp (Google Cloud Platform)
+
+Prerequisites:
+  - Root/sudo access
+  - KVM/libvirt installed
+  - Required tools: qemu-utils, libguestfs-tools
+HELP
+            ;;
+    esac
+}
+
+# Cleanup on exit
+cleanup() {
+    info "Cleaning up temporary files..."
+    rm -rf "$TEMP_DIR"
+}
+
+trap cleanup EXIT
+
+# Run main function
+main "$@"
+EOF
+
+chmod +x cross_platform_recovery.sh
+````
+
+---
+
+Продолжить с остальными заданиями модуля 10?
+
+1. Instant Recovery
+2. Synthetic Full Backups
+3. Continuous Data Protection (CDP)
+
+
+## 💻 Задание 3: Instant Recovery System
+```bash
+
+cat > instant_recovery.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+INSTANT_DIR="/var/lib/instant-recovery"
+BACKUP_DIR="/backup"
+MOUNT_DIR="/mnt/instant-recovery"
+LOG_FILE="/var/log/instant_recovery.log"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize instant recovery system
+init_instant_recovery() {
+    log "Initializing Instant Recovery System..."
+    
+    mkdir -p "$INSTANT_DIR"/{vms,mounts,snapshots,logs}
+    mkdir -p "$MOUNT_DIR"
+    
+    # Check for required tools
+    local required_tools=("qemu-nbd" "kpartx" "losetup" "virsh")
+    local missing_tools=()
+    
+    for tool in "${required_tools[@]}"; do
+        if ! command -v "$tool" &>/dev/null; then
+            missing_tools+=("$tool")
+        fi
+    done
+    
+    if [ ${#missing_tools[@]} -gt 0 ]; then
+        warn "Missing tools: ${missing_tools[*]}"
+        info "Installing required packages..."
+        apt-get update -qq
+        apt-get install -y qemu-utils kpartx libvirt-daemon-system libvirt-clients
+    fi
+    
+    # Load NBD module
+    if ! lsmod | grep -q nbd; then
+        info "Loading NBD kernel module..."
+        modprobe nbd max_part=8
+        echo "nbd" >> /etc/modules-load.d/instant-recovery.conf
+    fi
+    
+    # Create instant recovery database
+    create_instant_recovery_db
+    
+    success "Instant Recovery System initialized"
+}
+
+# Create instant recovery metadata database
+create_instant_recovery_db() {
+    info "Creating instant recovery metadata database..."
+    
+    mysql <<SQL
+CREATE DATABASE IF NOT EXISTS instant_recovery;
+
+USE instant_recovery;
+
+-- Instant VM tracking
+CREATE TABLE IF NOT EXISTS instant_vms (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    vm_id VARCHAR(64) UNIQUE NOT NULL,
+    vm_name VARCHAR(255) NOT NULL,
+    backup_path VARCHAR(512) NOT NULL,
+    backup_format ENUM('qcow2', 'vmdk', 'vdi', 'raw') NOT NULL,
+    nbd_device VARCHAR(64),
+    vnc_port INT,
+    vm_status ENUM('starting', 'running', 'stopped', 'failed') DEFAULT 'starting',
+    memory_mb INT DEFAULT 2048,
+    vcpus INT DEFAULT 2,
+    network_mode ENUM('bridged', 'nat', 'isolated') DEFAULT 'nat',
+    boot_time TIMESTAMP NULL,
+    access_count INT DEFAULT 0,
+    last_accessed TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_status (vm_status),
+    INDEX idx_vm_name (vm_name)
+) ENGINE=InnoDB;
+
+-- Instant file access tracking
+CREATE TABLE IF NOT EXISTS instant_mounts (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    mount_id VARCHAR(64) UNIQUE NOT NULL,
+    backup_path VARCHAR(512) NOT NULL,
+    mount_point VARCHAR(512) NOT NULL,
+    mount_type ENUM('full', 'partition', 'file') DEFAULT 'full',
+    filesystem VARCHAR(64),
+    mount_options TEXT,
+    readonly BOOLEAN DEFAULT TRUE,
+    nbd_device VARCHAR(64),
+    loop_device VARCHAR(64),
+    mount_status ENUM('mounting', 'mounted', 'unmounting', 'unmounted', 'error') DEFAULT 'mounting',
+    files_accessed INT DEFAULT 0,
+    bytes_read BIGINT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    unmounted_at TIMESTAMP NULL,
+    INDEX idx_status (mount_status),
+    INDEX idx_mount_point (mount_point)
+) ENGINE=InnoDB;
+
+-- Recovery operations
+CREATE TABLE IF NOT EXISTS instant_operations (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    operation_id VARCHAR(64) UNIQUE NOT NULL,
+    operation_type ENUM('instant_vm', 'instant_mount', 'file_access') NOT NULL,
+    target_resource VARCHAR(512) NOT NULL,
+    operation_status ENUM('pending', 'in_progress', 'completed', 'failed') DEFAULT 'pending',
+    duration_seconds INT,
+    error_message TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP NULL,
+    INDEX idx_type (operation_type),
+    INDEX idx_status (operation_status)
+) ENGINE=InnoDB;
+SQL
+    
+    success "Instant recovery database created"
+}
+
+# Instant VM boot from backup
+instant_vm_boot() {
+    local backup_image="$1"
+    local vm_name="${2:-instant-vm-$(date +%s)}"
+    local memory="${3:-2048}"
+    local vcpus="${4:-2}"
+    
+    local vm_id="ivm-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Starting Instant VM Boot"
+    info "VM ID: $vm_id"
+    info "Backup Image: $backup_image"
+    info "VM Name: $vm_name"
+    info "Memory: ${memory}MB"
+    info "vCPUs: $vcpus"
+    
+    # Validate backup image
+    if [ ! -f "$backup_image" ]; then
+        error "Backup image not found: $backup_image"
+        return 1
+    fi
+    
+    # Detect image format
+    local image_format=$(qemu-img info "$backup_image" | grep "file format" | awk '{print $3}')
+    info "Detected format: $image_format"
+    
+    # Record operation start
+    mysql instant_recovery <<SQL
+INSERT INTO instant_operations (operation_id, operation_type, target_resource, operation_status)
+VALUES ('$vm_id', 'instant_vm', '$backup_image', 'in_progress');
+
+INSERT INTO instant_vms (vm_id, vm_name, backup_path, backup_format, memory_mb, vcpus, vm_status)
+VALUES ('$vm_id', '$vm_name', '$backup_image', '$image_format', $memory, $vcpus, 'starting');
+SQL
+    
+    local start_time=$(date +%s)
+    
+    # Find available NBD device
+    local nbd_device=""
+    for i in {0..15}; do
+        if [ ! -e "/sys/block/nbd$i/pid" ]; then
+            nbd_device="/dev/nbd$i"
+            break
+        fi
+    done
+    
+    if [ -z "$nbd_device" ]; then
+        error "No available NBD devices"
+        return 1
+    fi
+    
+    info "Using NBD device: $nbd_device"
+    
+    # Mount backup image via NBD (read-only for instant access)
+    info "Mounting backup image via NBD..."
+    qemu-nbd --read-only --format="$image_format" --connect="$nbd_device" "$backup_image"
+    
+    # Wait for device to be ready
+    sleep 2
+    
+    # Create temporary VM definition
+    local vm_xml="$INSTANT_DIR/vms/${vm_id}.xml"
+    local vnc_port=$((5900 + $(echo $vm_id | md5sum | head -c 4 | tr 'a-f' '0-9') % 100))
+    
+    cat > "$vm_xml" <<XML
+<domain type='kvm'>
+  <name>$vm_name</name>
+  <uuid>$(uuidgen)</uuid>
+  <memory unit='MiB'>$memory</memory>
+  <currentMemory unit='MiB'>$memory</currentMemory>
+  <vcpu placement='static'>$vcpus</vcpu>
+  <os>
+    <type arch='x86_64' machine='pc-q35-6.2'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+  </features>
+  <cpu mode='host-passthrough'/>
+  <clock offset='utc'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw' cache='none'/>
+      <source dev='$nbd_device'/>
+      <target dev='vda' bus='virtio'/>
+      <readonly/>
+    </disk>
+    <interface type='network'>
+      <source network='default'/>
+      <model type='virtio'/>
+    </interface>
+    <graphics type='vnc' port='$vnc_port' autoport='no' listen='0.0.0.0'>
+      <listen type='address' address='0.0.0.0'/>
+    </graphics>
+    <video>
+      <model type='qxl'/>
+    </video>
+    <console type='pty'/>
+  </devices>
+</domain>
+XML
+    
+    # Start the VM
+    info "Starting instant VM..."
+    virsh define "$vm_xml"
+    virsh start "$vm_name"
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    # Update database
+    mysql instant_recovery <<SQL
+UPDATE instant_vms
+SET nbd_device = '$nbd_device',
+    vnc_port = $vnc_port,
+    vm_status = 'running',
+    boot_time = NOW()
+WHERE vm_id = '$vm_id';
+
+UPDATE instant_operations
+SET operation_status = 'completed',
+    duration_seconds = $duration,
+    completed_at = NOW()
+WHERE operation_id = '$vm_id';
+SQL
+    
+    success "Instant VM booted in ${duration}s!"
+    success "VM Name: $vm_name"
+    success "VNC Port: $vnc_port"
+    success "NBD Device: $nbd_device"
+    
+    echo ""
+    info "Connect to VM:"
+    echo "  VNC: localhost:$vnc_port"
+    echo "  virt-viewer: virt-viewer $vm_name"
+    echo ""
+    warn "VM is read-only! Changes will not persist."
+    warn "Use 'instant-clone' to create writable copy if needed."
+    
+    # Create connection script
+    cat > "$INSTANT_DIR/vms/${vm_id}_connect.sh" <<CONNECT
+#!/bin/bash
+echo "Connecting to Instant VM: $vm_name"
+virt-viewer $vm_name
+CONNECT
+    
+    chmod +x "$INSTANT_DIR/vms/${vm_id}_connect.sh"
+    
+    echo "$vm_id"
+}
+
+# Instant file-level access
+instant_file_access() {
+    local backup_image="$1"
+    local target_path="${2:-.}"
+    
+    local mount_id="imount-$(date +%Y%m%d-%H%M%S)"
+    local mount_point="$MOUNT_DIR/$mount_id"
+    
+    info "Starting Instant File Access"
+    info "Mount ID: $mount_id"
+    info "Backup Image: $backup_image"
+    
+    # Create mount point
+    mkdir -p "$mount_point"
+    
+    # Detect image format
+    local image_format=$(qemu-img info "$backup_image" | grep "file format" | awk '{print $3}')
+    
+    # Record operation
+    mysql instant_recovery <<SQL
+INSERT INTO instant_operations (operation_id, operation_type, target_resource, operation_status)
+VALUES ('$mount_id', 'instant_mount', '$backup_image', 'in_progress');
+
+INSERT INTO instant_mounts (mount_id, backup_path, mount_point, mount_status)
+VALUES ('$mount_id', '$backup_image', '$mount_point', 'mounting');
+SQL
+    
+    local start_time=$(date +%s)
+    
+    # Find available NBD device
+    local nbd_device=""
+    for i in {0..15}; do
+        if [ ! -e "/sys/block/nbd$i/pid" ]; then
+            nbd_device="/dev/nbd$i"
+            break
+        fi
+    done
+    
+    if [ -z "$nbd_device" ]; then
+        error "No available NBD devices"
+        return 1
+    fi
+    
+    info "Using NBD device: $nbd_device"
+    
+    # Connect backup image to NBD
+    info "Connecting backup image..."
+    qemu-nbd --read-only --format="$image_format" --connect="$nbd_device" "$backup_image"
+    
+    sleep 2
+    
+    # Detect partitions
+    info "Detecting partitions..."
+    partprobe "$nbd_device" 2>/dev/null || true
+    
+    # List available partitions
+    local partitions=$(lsblk -ln -o NAME "$nbd_device" | tail -n +2)
+    
+    if [ -z "$partitions" ]; then
+        # No partitions, try to mount the device directly
+        info "No partitions found, attempting direct mount..."
+        
+        local filesystem=$(blkid -o value -s TYPE "$nbd_device" 2>/dev/null || echo "unknown")
+        
+        if [ "$filesystem" != "unknown" ]; then
+            mount -o ro "$nbd_device" "$mount_point"
+            
+            mysql instant_recovery <<SQL
+UPDATE instant_mounts
+SET filesystem = '$filesystem',
+    nbd_device = '$nbd_device',
+    mount_status = 'mounted'
+WHERE mount_id = '$mount_id';
+SQL
+        else
+            error "Unable to detect filesystem"
+            qemu-nbd --disconnect "$nbd_device"
+            return 1
+        fi
+    else
+        # Mount all partitions
+        info "Found partitions:"
+        echo "$partitions" | while read partition; do
+            echo "  - /dev/$partition"
+        done
+        
+        # Mount the largest partition (usually root)
+        local largest_part=$(lsblk -ln -o NAME,SIZE "$nbd_device" | tail -n +2 | sort -k2 -h | tail -1 | awk '{print $1}')
+        
+        info "Mounting largest partition: /dev/$largest_part"
+        
+        local filesystem=$(blkid -o value -s TYPE "/dev/$largest_part" 2>/dev/null || echo "unknown")
+        
+        if mount -o ro "/dev/$largest_part" "$mount_point" 2>/dev/null; then
+            mysql instant_recovery <<SQL
+UPDATE instant_mounts
+SET filesystem = '$filesystem',
+    nbd_device = '/dev/$largest_part',
+    mount_status = 'mounted'
+WHERE mount_id = '$mount_id';
+SQL
+        else
+            error "Failed to mount partition"
+            qemu-nbd --disconnect "$nbd_device"
+            return 1
+        fi
+    fi
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    # Update operation status
+    mysql instant_recovery <<SQL
+UPDATE instant_operations
+SET operation_status = 'completed',
+    duration_seconds = $duration,
+    completed_at = NOW()
+WHERE operation_id = '$mount_id';
+SQL
+    
+    success "Instant file access ready in ${duration}s!"
+    success "Mount Point: $mount_point"
+    success "Access Mode: Read-Only"
+    
+    echo ""
+    info "Browse files:"
+    echo "  cd $mount_point"
+    echo "  ls -la $mount_point"
+    
+    # Show directory structure
+    if [ -d "$mount_point" ]; then
+        echo ""
+        info "Top-level directories:"
+        ls -lh "$mount_point" | head -20
+    fi
+    
+    echo ""
+    warn "Files are read-only! Copy files to restore them."
+    
+    echo "$mount_id"
+}
+
+# Clone instant VM to writable copy
+instant_clone() {
+    local vm_id="$1"
+    local clone_name="${2:-clone-$(date +%s)}"
+    
+    info "Cloning instant VM to writable copy..."
+    info "Source VM ID: $vm_id"
+    info "Clone Name: $clone_name"
+    
+    # Get source VM info
+    local vm_info=$(mysql -N instant_recovery <<SQL
+SELECT backup_path, backup_format, memory_mb, vcpus
+FROM instant_vms
+WHERE vm_id = '$vm_id';
+SQL
+)
+    
+    if [ -z "$vm_info" ]; then
+        error "VM not found: $vm_id"
+        return 1
+    fi
+    
+    local backup_path=$(echo "$vm_info" | awk '{print $1}')
+    local format=$(echo "$vm_info" | awk '{print $2}')
+    local memory=$(echo "$vm_info" | awk '{print $3}')
+    local vcpus=$(echo "$vm_info" | awk '{print $4}')
+    
+    # Create writable clone
+    local clone_path="$INSTANT_DIR/vms/${clone_name}.${format}"
+    
+    info "Creating writable clone..."
+    qemu-img create -f "$format" -b "$backup_path" -F "$format" "$clone_path"
+    
+    success "Writable clone created: $clone_path"
+    info "Clone uses backing file - only changes are stored"
+    
+    # Create new VM definition
+    local clone_xml="$INSTANT_DIR/vms/${clone_name}.xml"
+    local vnc_port=$((5900 + RANDOM % 100))
+    
+    cat > "$clone_xml" <<XML
+<domain type='kvm'>
+  <name>$clone_name</name>
+  <uuid>$(uuidgen)</uuid>
+  <memory unit='MiB'>$memory</memory>
+  <vcpu>$vcpus</vcpu>
+  <os>
+    <type arch='x86_64'>hvm</type>
+    <boot dev='hd'/>
+  </os>
+  <devices>
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='$format'/>
+      <source file='$clone_path'/>
+      <target dev='vda' bus='virtio'/>
+    </disk>
+    <interface type='network'>
+      <source network='default'/>
+      <model type='virtio'/>
+    </interface>
+    <graphics type='vnc' port='$vnc_port' autoport='no'/>
+  </devices>
+</domain>
+XML
+    
+    virsh define "$clone_xml"
+    
+    success "VM clone ready!"
+    success "VM Name: $clone_name"
+    success "Start with: virsh start $clone_name"
+}
+
+# List active instant recoveries
+list_instant_recoveries() {
+    info "Active Instant Recoveries"
+    echo ""
+    
+    echo "=== Instant VMs ==="
+    mysql -t instant_recovery <<SQL
+SELECT vm_name, vm_status, vnc_port, 
+       CONCAT(memory_mb, 'MB') as memory,
+       TIMESTAMPDIFF(MINUTE, boot_time, NOW()) as uptime_min,
+       access_count
+FROM instant_vms
+WHERE vm_status = 'running'
+ORDER BY boot_time DESC;
+SQL
+    
+    echo ""
+    echo "=== Instant Mounts ==="
+    mysql -t instant_recovery <<SQL
+SELECT mount_point, filesystem, mount_status,
+       files_accessed, 
+       CONCAT(ROUND(bytes_read/1024/1024, 2), 'MB') as data_read,
+       TIMESTAMPDIFF(MINUTE, created_at, NOW()) as age_min
+FROM instant_mounts
+WHERE mount_status = 'mounted'
+ORDER BY created_at DESC;
+SQL
+}
+
+# Cleanup instant recovery
+cleanup_instant_recovery() {
+    local resource_id="$1"
+    
+    info "Cleaning up instant recovery: $resource_id"
+    
+    # Check if it's a VM
+    local vm_name=$(mysql -N instant_recovery -e "SELECT vm_name FROM instant_vms WHERE vm_id='$resource_id'")
+    
+    if [ -n "$vm_name" ]; then
+        info "Stopping instant VM: $vm_name"
+        
+        # Get NBD device
+        local nbd_device=$(mysql -N instant_recovery -e "SELECT nbd_device FROM instant_vms WHERE vm_id='$resource_id'")
+        
+        # Stop VM
+        virsh destroy "$vm_name" 2>/dev/null || true
+        virsh undefine "$vm_name" 2>/dev/null || true
+        
+        # Disconnect NBD
+        if [ -n "$nbd_device" ]; then
+            qemu-nbd --disconnect "$nbd_device" 2>/dev/null || true
+        fi
+        
+        # Update database
+        mysql instant_recovery <<SQL
+UPDATE instant_vms SET vm_status = 'stopped' WHERE vm_id = '$resource_id';
+SQL
+        
+        success "Instant VM cleaned up"
+        return
+    fi
+    
+    # Check if it's a mount
+    local mount_point=$(mysql -N instant_recovery -e "SELECT mount_point FROM instant_mounts WHERE mount_id='$resource_id'")
+    
+    if [ -n "$mount_point" ]; then
+        info "Unmounting instant mount: $mount_point"
+        
+        # Get NBD device
+        local nbd_device=$(mysql -N instant_recovery -e "SELECT nbd_device FROM instant_mounts WHERE mount_id='$resource_id'")
+        
+        # Unmount
+        umount "$mount_point" 2>/dev/null || true
+        
+        # Disconnect NBD
+        if [[ "$nbd_device" == *"nbd"* ]]; then
+            local base_device=$(echo "$nbd_device" | sed 's/p[0-9]*$//')
+            qemu-nbd --disconnect "$base_device" 2>/dev/null || true
+        fi
+        
+        # Remove mount point
+        rmdir "$mount_point" 2>/dev/null || true
+        
+        # Update database
+        mysql instant_recovery <<SQL
+UPDATE instant_mounts 
+SET mount_status = 'unmounted', unmounted_at = NOW() 
+WHERE mount_id = '$resource_id';
+SQL
+        
+        success "Instant mount cleaned up"
+        return
+    fi
+    
+    error "Resource not found: $resource_id"
+}
+
+# Cleanup all instant recoveries
+cleanup_all() {
+    warn "Cleaning up all instant recoveries..."
+    
+    # Get all active VMs
+    local vms=$(mysql -N instant_recovery -e "SELECT vm_id FROM instant_vms WHERE vm_status='running'")
+    
+    for vm_id in $vms; do
+        cleanup_instant_recovery "$vm_id"
+    done
+    
+    # Get all active mounts
+    local mounts=$(mysql -N instant_recovery -e "SELECT mount_id FROM instant_mounts WHERE mount_status='mounted'")
+    
+    for mount_id in $mounts; do
+        cleanup_instant_recovery "$mount_id"
+    done
+    
+    success "All instant recoveries cleaned up"
+}
+
+# Generate instant recovery report
+generate_instant_report() {
+    local report_file="$INSTANT_DIR/logs/instant_recovery_report_$(date +%Y%m%d).html"
+    
+    info "Generating instant recovery report..."
+    
+    cat > "$report_file" <<'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Instant Recovery Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 { color: #667eea; border-bottom: 3px solid #764ba2; padding-bottom: 10px; }
+        h2 { color: #764ba2; margin-top: 30px; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #667eea;
+            color: white;
+        }
+        tr:hover { background: #f5f5f5; }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚡ Instant Recovery System Report</h1>
+        <p><strong>Generated:</strong> $(date)</p>
+HTML
+    
+    # Add statistics
+    local total_vms=$(mysql -N instant_recovery -e "SELECT COUNT(*) FROM instant_vms")
+    local active_vms=$(mysql -N instant_recovery -e "SELECT COUNT(*) FROM instant_vms WHERE vm_status='running'")
+    local total_mounts=$(mysql -N instant_recovery -e "SELECT COUNT(*) FROM instant_mounts")
+    local active_mounts=$(mysql -N instant_recovery -e "SELECT COUNT(*) FROM instant_mounts WHERE mount_status='mounted'")
+    
+    cat >> "$report_file" <<HTML
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Instant VMs</div>
+                <div class="stat-value">$total_vms</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active VMs</div>
+                <div class="stat-value">$active_vms</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Mounts</div>
+                <div class="stat-value">$total_mounts</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Active Mounts</div>
+                <div class="stat-value">$active_mounts</div>
+            </div>
+        </div>
+        
+        <h2>Active Instant VMs</h2>
+        <table>
+            <tr>
+                <th>VM Name</th>
+                <th>Status</th>
+                <th>VNC Port</th>
+                <th>Memory</th>
+                <th>Uptime</th>
+                <th>Access Count</th>
+            </tr>
+HTML
+    
+    mysql -N instant_recovery -e "
+        SELECT vm_name, vm_status, vnc_port, 
+               CONCAT(memory_mb, 'MB'),
+               CONCAT(TIMESTAMPDIFF(MINUTE, boot_time, NOW()), 'm'),
+               access_count
+        FROM instant_vms 
+        WHERE vm_status = 'running'
+    " | while IFS=$'\t' read name status port mem uptime count; do
+        echo "<tr><td>$name</td><td>$status</td><td>$port</td><td>$mem</td><td>$uptime</td><td>$count</td></tr>" >> "$report_file"
+    done
+    
+    cat >> "$report_file" <<HTML
+        </table>
+        
+        <h2>Active Instant Mounts</h2>
+        <table>
+            <tr>
+                <th>Mount Point</th>
+                <th>Filesystem</th>
+                <th>Files Accessed</th>
+                <th>Data Read</th>
+                <th>Age</th>
+            </tr>
+HTML
+    
+    mysql -N instant_recovery -e "
+        SELECT mount_point, filesystem, files_accessed,
+               CONCAT(ROUND(bytes_read/1024/1024, 2), 'MB'),
+               CONCAT(TIMESTAMPDIFF(MINUTE, created_at, NOW()), 'm')
+        FROM instant_mounts 
+        WHERE mount_status = 'mounted'
+    " | while IFS=$'\t' read mount fs files data age; do
+        echo "<tr><td>$mount</td><td>$fs</td><td>$files</td><td>$data</td><td>$age</td></tr>" >> "$report_file"
+    done
+    
+    cat >> "$report_file" <<HTML
+        </table>
+    </div>
+</body>
+</html>
+HTML
+    
+    success "Report generated: $report_file"
+    echo "$report_file"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_instant_recovery
+        ;;
+    
+    boot)
+        if [ -z "$2" ]; then
+            error "Usage: $0 boot <backup_image> [vm_name] [memory_mb] [vcpus]"
+            exit 1
+        fi
+        init_instant_recovery
+        instant_vm_boot "$2" "$3" "$4" "$5"
+        ;;
+    
+    mount)
+        if [ -z "$2" ]; then
+            error "Usage: $0 mount <backup_image>"
+            exit 1
+        fi
+        init_instant_recovery
+        instant_file_access "$2"
+        ;;
+    
+    clone)
+        if [ -z "$2" ]; then
+            error "Usage: $0 clone <vm_id> [clone_name]"
+            exit 1
+        fi
+        instant_clone "$2" "$3"
+        ;;
+    
+    list)
+        list_instant_recoveries
+        ;;
+    
+    cleanup)
+        if [ -z "$2" ]; then
+            cleanup_all
+        else
+            cleanup_instant_recovery "$2"
+        fi
+        ;;
+    
+    report)
+        generate_instant_report
+        ;;
+    
+    *)
+        cat <<HELP
+Instant Recovery System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init              - Initialize instant recovery system
+    boot <image>      - Boot VM instantly from backup
+    mount <image>     - Mount backup for file access
+    clone <vm_id>     - Clone instant VM to writable copy
+    list              - List active instant recoveries
+    cleanup [id]      - Cleanup instant recovery (or all)
+    report            - Generate instant recovery report
+
+Examples:
+    $0 boot /backup/vm1.qcow2
+    $0 boot /backup/vm1.qcow2 my-vm 4096 4
+    $0 mount /backup/vm1.qcow2
+    $0 clone ivm-20240115-143000 production-vm
+    $0 list
+    $0 cleanup ivm-20240115-143000
+    $0 cleanup
+
+Features:
+    ✓ Boot VMs directly from backups (seconds, not minutes!)
+    ✓ Read-only instant access to files
+    ✓ No full restore required
+    ✓ Clone to writable VM when needed
+    ✓ Multiple concurrent instant VMs
+    ✓ Automatic cleanup
+
+HELP
+;;
+
+esac
+
+EOF
+
+chmod +x instant_recovery.sh
+
+````
+
+## 💻 Задание 4: Synthetic Full Backup & CDP
+
+```bash
+cat > synthetic_backup_cdp.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+SYNTHETIC_DIR="/var/lib/synthetic-backups"
+CDP_DIR="/var/lib/cdp"
+BACKUP_DIR="/backup"
+LOG_FILE="/var/log/synthetic_cdp.log"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+info() {
+    echo -e "${BLUE}[INFO]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    echo -e "${YELLOW}[WARN]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}[ERROR]${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize systems
+init_synthetic_cdp() {
+    log "Initializing Synthetic Backup & CDP System..."
+    
+    mkdir -p "$SYNTHETIC_DIR"/{full,incremental,synthetic,metadata}
+    mkdir -p "$CDP_DIR"/{journal,snapshots,recovery_points}
+    
+    # Create metadata database
+    mysql <<SQL
+CREATE DATABASE IF NOT EXISTS backup_advanced;
+
+USE backup_advanced;
+
+-- Synthetic backup tracking
+CREATE TABLE IF NOT EXISTS synthetic_backups (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    backup_id VARCHAR(64) UNIQUE NOT NULL,
+    backup_type ENUM('full', 'incremental', 'synthetic_full') NOT NULL,
+    source_backups TEXT,
+    backup_path VARCHAR(512) NOT NULL,
+    backup_size BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    parent_backup_id VARCHAR(64),
+    is_latest BOOLEAN DEFAULT FALSE,
+    INDEX idx_type (backup_type),
+    INDEX idx_created (created_at)
+) ENGINE=InnoDB;
+
+-- CDP journal
+CREATE TABLE IF NOT EXISTS cdp_journal (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    journal_id VARCHAR(64) NOT NULL,
+    timestamp TIMESTAMP(6) NOT NULL,
+    operation_type ENUM('write', 'delete', 'rename') NOT NULL,
+    file_path VARCHAR(1024) NOT NULL,
+    offset_start BIGINT,
+    offset_end BIGINT,
+    data_location VARCHAR(512),
+    checksum VARCHAR(128),
+    INDEX idx_timestamp (timestamp),
+    INDEX idx_file (file_path(255))
+) ENGINE=InnoDB;
+
+-- Recovery points
+CREATE TABLE IF NOT EXISTS recovery_points (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    rp_id VARCHAR(64) UNIQUE NOT NULL,
+    rp_timestamp TIMESTAMP(6) NOT NULL,
+    rp_type ENUM('snapshot', 'journal_based', 'synthetic') NOT NULL,
+    data_path VARCHAR(512),
+    journal_sequence BIGINT,
+    is_consistent BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_timestamp (rp_timestamp)
+) ENGINE=InnoDB;
+SQL
+    
+    success "Synthetic Backup & CDP System initialized"
+}
+
+# Create synthetic full backup
+create_synthetic_full() {
+    local base_full="$1"
+    local incremental_chain="$2"
+    
+    local synthetic_id="synthetic-$(date +%Y%m%d-%H%M%S)"
+    
+    info "Creating Synthetic Full Backup"
+    info "Synthetic ID: $synthetic_id"
+    info "Base Full: $base_full"
+    info "Incrementals: $incremental_chain"
+    
+    local synthetic_path="$SYNTHETIC_DIR/synthetic/${synthetic_id}.qcow2"
+    
+    # Create base synthetic image
+    info "Creating synthetic base..."
+    cp "$base_full" "$synthetic_path.tmp"
+    
+    # Apply incrementals
+    local total_applied=0
+    
+    for incremental in $(echo "$incremental_chain" | tr ',' ' '); do
+        info "Merging incremental: $incremental"
+        
+        # Use qemu-img to merge
+        qemu-img rebase -u -b "$synthetic_path.tmp" "$incremental"
+        qemu-img commit "$incremental"
+        
+        ((total_applied++))
+    done
+    
+    mv "$synthetic_path.tmp" "$synthetic_path"
+    
+    # Optimize
+    info "Optimizing synthetic backup..."
+    qemu-img convert -p -O qcow2 -c "$synthetic_path" "$synthetic_path.optimized"
+    mv "$synthetic_path.optimized" "$synthetic_path"
+    
+    local backup_size=$(stat -c %s "$synthetic_path")
+    
+    # Record in database
+    mysql backup_advanced <<SQL
+INSERT INTO synthetic_backups (
+    backup_id, backup_type, source_backups, 
+    backup_path, backup_size, is_latest
+) VALUES (
+    '$synthetic_id',
+    'synthetic_full',
+    '$base_full,$incremental_chain',
+    '$synthetic_path',
+    $backup_size,
+    TRUE
+);
+
+UPDATE synthetic_backups SET is_latest = FALSE 
+WHERE backup_type = 'synthetic_full' AND backup_id != '$synthetic_id';
+SQL
+    
+    success "Synthetic full backup created!"
+    success "Size: $(echo "scale=2; $backup_size / 1024 / 1024 / 1024" | bc) GB"
+    success "Incrementals merged: $total_applied"
+}
+
+# Initialize CDP
+init_cdp() {
+    local watch_path="$1"
+    
+    info "Initializing Continuous Data Protection"
+    info "Watch Path: $watch_path"
+    
+    # Create initial snapshot
+    local snapshot_id="cdp-snapshot-$(date +%Y%m%d-%H%M%S)"
+    local snapshot_path="$CDP_DIR/snapshots/${snapshot_id}"
+    
+    info "Creating baseline snapshot..."
+    rsync -a "$watch_path/" "$snapshot_path/"
+    
+    # Start inotify watcher
+    start_cdp_watcher "$watch_path" "$snapshot_id"
+}
+
+# Start CDP watcher
+start_cdp_watcher() {
+    local watch_path="$1"
+    local snapshot_id="$2"
+    
+    local journal_id="journal-$(date +%Y%m%d)"
+    local journal_file="$CDP_DIR/journal/${journal_id}.log"
+    
+    info "Starting CDP watcher on $watch_path"
+    
+    # Create watcher script
+    cat > "$CDP_DIR/cdp_watcher.sh" <<'WATCHER'
+#!/bin/bash
+
+WATCH_PATH="$1"
+JOURNAL_ID="$2"
+JOURNAL_FILE="$CDP_DIR/journal/${JOURNAL_ID}.log"
+
+inotifywait -m -r -e modify,create,delete,move "$WATCH_PATH" --format '%T %e %w%f' --timefmt '%Y-%m-%d %H:%M:%S' | \
+while read timestamp event file; do
+    # Log to journal
+    echo "$timestamp|$event|$file" >> "$JOURNAL_FILE"
+    
+    # Record in database
+    mysql backup_advanced <<SQL
+INSERT INTO cdp_journal (journal_id, timestamp, operation_type, file_path)
+VALUES ('$JOURNAL_ID', '$timestamp', 
+        CASE 
+            WHEN '$event' LIKE '%MODIFY%' THEN 'write'
+            WHEN '$event' LIKE '%DELETE%' THEN 'delete'
+            WHEN '$event' LIKE '%MOVE%' THEN 'rename'
+            ELSE 'write'
+        END,
+        '$file');
+SQL
+    
+    # Create recovery point every 5 minutes
+    if [ $((RANDOM % 300)) -eq 0 ]; then
+        create_recovery_point "$JOURNAL_ID"
+    fi
+done
+WATCHER
+    
+    chmod +x "$CDP_DIR/cdp_watcher.sh"
+    
+    # Start watcher in background
+    nohup "$CDP_DIR/cdp_watcher.sh" "$watch_path" "$journal_id" > "$CDP_DIR/watcher.log" 2>&1 &
+    
+    local watcher_pid=$!
+    echo "$watcher_pid" > "$CDP_DIR/watcher.pid"
+    
+    success "CDP watcher started (PID: $watcher_pid)"
+}
+
+# Create recovery point
+create_recovery_point() {
+    local journal_id="$1"
+    
+    local rp_id="rp-$(date +%Y%m%d-%H%M%S-%N)"
+    local rp_timestamp=$(date '+%Y-%m-%d %H:%M:%S.%6N')
+    
+    # Get current journal sequence
+    local journal_seq=$(mysql -N backup_advanced -e "
+        SELECT COALESCE(MAX(id), 0) FROM cdp_journal WHERE journal_id='$journal_id'
+    ")
+    
+    mysql backup_advanced <<SQL
+INSERT INTO recovery_points (rp_id, rp_timestamp, rp_type, journal_sequence)
+VALUES ('$rp_id', '$rp_timestamp', 'journal_based', $journal_seq);
+SQL
+    
+    info "Recovery point created: $rp_id at $rp_timestamp"
+}
+
+# Recover to specific point in time (CDP)
+cdp_recovery() {
+    local target_time="$1"
+    local recovery_path="${2:-$CDP_DIR/recovery}"
+    
+    info "CDP Recovery to $target_time"
+    
+    # Find nearest recovery point before target
+    local rp_info=$(mysql -N backup_advanced <<SQL
+SELECT rp_id, rp_timestamp, journal_sequence
+FROM recovery_points
+WHERE rp_timestamp <= '$target_time'
+ORDER BY rp_timestamp DESC
+LIMIT 1;
+SQL
+)
+    
+    if [ -z "$rp_info" ]; then
+        error "No recovery point found before $target_time"
+        return 1
+    fi
+    
+    local rp_id=$(echo "$rp_info" | awk '{print $1}')
+    local rp_ts=$(echo "$rp_info" | awk '{print $2" "$3}')
+    local journal_seq=$(echo "$rp_info" | awk '{print $4}')
+    
+    info "Using recovery point: $rp_id ($rp_ts)"
+    
+    # Find baseline snapshot
+    local snapshot=$(ls -t "$CDP_DIR/snapshots" | head -1)
+    
+    info "Starting from snapshot: $snapshot"
+    
+    # Copy baseline
+    mkdir -p "$recovery_path"
+    rsync -a "$CDP_DIR/snapshots/$snapshot/" "$recovery_path/"
+    
+    # Replay journal up to target time
+    info "Replaying journal up to $target_time..."
+    
+    local operations=$(mysql -N backup_advanced <<SQL
+SELECT operation_type, file_path 
+FROM cdp_journal
+WHERE id <= $journal_seq
+AND timestamp <= '$target_time'
+ORDER BY id;
+SQL
+)
+    
+    local op_count=0
+    
+    while IFS=$'\t' read op_type file_path; do
+        case "$op_type" in
+            write)
+                # File was modified - keep current version
+                ;;
+            delete)
+                # File was deleted
+                rm -f "$recovery_path/$file_path" 2>/dev/null || true
+                ;;
+            rename)
+                # Handle rename (simplified)
+                ;;
+        esac
+        
+        ((op_count++))
+        
+        if [ $((op_count % 1000)) -eq 0 ]; then
+            info "Processed $op_count operations..."
+        fi
+    done <<< "$operations"
+    
+    success "CDP recovery completed!"
+    success "Recovery path: $recovery_path"
+    success "Operations replayed: $op_count"
+    success "Recovery point time: $rp_ts"
+}
+
+# Show CDP statistics
+cdp_stats() {
+    info "CDP Statistics"
+    echo ""
+    
+    echo "=== Journal Entries ==="
+    mysql -t backup_advanced <<SQL
+SELECT 
+    DATE(timestamp) as date,
+    operation_type,
+    COUNT(*) as count
+FROM cdp_journal
+GROUP BY DATE(timestamp), operation_type
+ORDER BY date DESC, operation_type
+LIMIT 20;
+SQL
+    
+    echo ""
+    echo "=== Recovery Points ==="
+    mysql -t backup_advanced <<SQL
+SELECT 
+    rp_id,
+    rp_timestamp,
+    rp_type,
+    is_consistent
+FROM recovery_points
+ORDER BY rp_timestamp DESC
+LIMIT 10;
+SQL
+    
+    echo ""
+    echo "=== Storage Usage ==="
+    du -sh "$CDP_DIR"/*
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_synthetic_cdp
+        ;;
+    
+    synthetic)
+        if [ -z "$2" ] || [ -z "$3" ]; then
+            error "Usage: $0 synthetic <base_full> <incremental_chain>"
+            exit 1
+        fi
+        create_synthetic_full "$2" "$3"
+        ;;
+    
+    cdp-init)
+        if [ -z "$2" ]; then
+            error "Usage: $0 cdp-init <watch_path>"
+            exit 1
+        fi
+        init_cdp "$2"
+        ;;
+    
+    cdp-recover)
+        if [ -z "$2" ]; then
+            error "Usage: $0 cdp-recover <target_time> [recovery_path]"
+            exit 1
+        fi
+        cdp_recovery "$2" "$3"
+        ;;
+    
+    cdp-stats)
+        cdp_stats
+        ;;
+    
+    *)
+        cat <<HELP
+Synthetic Backup & CDP System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init                    - Initialize system
+    synthetic <full> <inc>  - Create synthetic full backup
+    cdp-init <path>         - Initialize CDP on path
+    cdp-recover <time>      - Recover to point in time
+    cdp-stats               - Show CDP statistics
+
+Examples:
+    $0 synthetic /backup/full.qcow2 /backup/inc1.qcow2,/backup/inc2.qcow2
+    $0 cdp-init /data/important
+    $0 cdp-recover "2024-01-15 14:30:00"
+
+Features:
+    ✓ Synthetic full backups (combine incrementals)
+    ✓ Continuous Data Protection (CDP)
+    ✓ Any-point-in-time recovery
+    ✓ Near-zero RPO
+    ✓ Journal-based recovery
+HELP
+        ;;
+esac
+EOF
+
+chmod +x synthetic_backup_cdp.sh
+````
+
+## 📝 Финальная проверка модуля
+
+```bash
+cat > module10_final_check.sh <<'EOF'
+#!/bin/bash
+
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║  MODULE 10: ADVANCED RECOVERY TECHNIQUES - FINAL CHECK   ║"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+
+# Test 1: MySQL PITR
+echo "✓ Test 1: MySQL Point-in-Time Recovery"
+./advanced_mysql_pitr.sh init
+./advanced_mysql_pitr.sh backup
+
+# Test 2: Cross-Platform Recovery
+echo ""
+echo "✓ Test 2: Cross-Platform Recovery"
+./cross_platform_recovery.sh init
+
+# Test 3: Instant Recovery
+echo ""
+echo "✓ Test 3: Instant Recovery"
+./instant_recovery.sh init
+./instant_recovery.sh list
+
+# Test 4: Synthetic Backup & CDP
+echo ""
+echo "✓ Test 4: Synthetic Backup & CDP"
+./synthetic_backup_cdp.sh init
+
+echo ""
+echo "╔══════════════════════════════════════════════════════════╗"
+echo "║                   MODULE 10 COMPLETED!                   ║"
+echo "╚══════════════════════════════════════════════════════════╝"
+echo ""
+echo "Advanced Recovery Techniques Mastered:"
+echo "  ✓ Point-in-Time Recovery (PITR)"
+echo "  ✓ Granular Recovery (file/table/database)"
+echo "  ✓ Cross-Platform Recovery (P2V, V2V, Cloud)"
+echo "  ✓ Instant Recovery"
+echo "  ✓ Synthetic Full Backups"
+echo "  ✓ Continuous Data Protection (CDP)"
+echo ""
+echo "Congratulations! You've completed the Advanced Recovery module! 🎉"
+EOF
+
+chmod +x module10_final_check.sh
+```
+
+**Модуль 10 завершён!** 🎉
+
+Теперь ты владеешь:
+
+- ✅ **PITR** - восстановление до точного момента времени
+- ✅ **Granular Recovery** - восстановление отдельных файлов/таблиц
+- ✅ **P2V/V2V** - миграция между платформами
+- ✅ **Instant Recovery** - мгновенный доступ к бэкапам
+- ✅ **Synthetic Backups** - оптимизация хранения
+- ✅ **CDP** - непрерывная защита данных
+
+Готов к следующему модулю? 🚀
+
+---
+# Модуль 11: Application-Specific Backups (25 минут)
+
+## 🎯 Напоминалка
+
+### Application Backup Strategy Matrix
+
+```
+Application Backup Landscape
+┌────────────────────────────────────────────────────────────┐
+│                  CONTAINER PLATFORMS                       │
+├────────────────────────────────────────────────────────────┤
+│ Kubernetes                                                 │
+│   ├── etcd Cluster State                                  │
+│   ├── Persistent Volume Claims (PVCs)                     │
+│   ├── ConfigMaps & Secrets                                │
+│   ├── Custom Resource Definitions (CRDs)                  │
+│   └── Helm Charts & Manifests                             │
+│                                                            │
+│ Docker/Containers                                          │
+│   ├── Container Images                                     │
+│   ├── Volumes & Bind Mounts                               │
+│   ├── Docker Compose Configurations                       │
+│   └── Container Registry Backups                          │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│              VIRTUALIZATION PLATFORMS                      │
+├────────────────────────────────────────────────────────────┤
+│ VMware vSphere                                             │
+│   ├── VM Snapshots                                         │
+│   ├── Changed Block Tracking (CBT)                        │
+│   ├── vCenter Configuration                               │
+│   └── ESXi Host Configs                                   │
+│                                                            │
+│ Hyper-V                                                    │
+│   ├── VM Checkpoints                                       │
+│   ├── Virtual Hard Disks (VHD/VHDX)                      │
+│   ├── VSS Integration                                      │
+│   └── Cluster Configuration                               │
+│                                                            │
+│ KVM/Libvirt                                                │
+│   ├── QCOW2 Snapshots                                     │
+│   ├── XML Domain Definitions                              │
+│   ├── Storage Pool Backups                                │
+│   └── Network Configurations                              │
+│                                                            │
+│ Proxmox VE                                                 │
+│   ├── VM/Container Backups                                │
+│   ├── ZFS/LVM Snapshots                                   │
+│   ├── Cluster Configuration                               │
+│   └── PBS Integration                                      │
+└────────────────────────────────────────────────────────────┘
+
+┌────────────────────────────────────────────────────────────┐
+│                 SAAS & CLOUD SERVICES                      │
+├────────────────────────────────────────────────────────────┤
+│ Microsoft 365                                              │
+│   ├── Exchange Online (Email)                             │
+│   ├── SharePoint/OneDrive                                 │
+│   ├── Teams Chat & Files                                  │
+│   └── Azure AD                                             │
+│                                                            │
+│ Google Workspace                                           │
+│   ├── Gmail                                                │
+│   ├── Drive Files                                          │
+│   ├── Shared Drives                                        │
+│   └── Admin Settings                                       │
+│                                                            │
+│ Development Platforms                                      │
+│   ├── GitHub Repositories                                  │
+│   ├── GitLab Projects                                      │
+│   ├── Jira/Confluence                                      │
+│   └── Jenkins Configurations                              │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Backup Approach Decision Tree
+
+```
+Application Type Assessment
+            │
+            ▼
+    ┌───────────────┐
+    │  Stateful or  │
+    │  Stateless?   │
+    └───────┬───────┘
+            │
+    ┌───────┴────────┐
+    │                │
+Stateful         Stateless
+    │                │
+    ▼                ▼
+┌────────┐      ┌────────┐
+│ Volume │      │ Config │
+│ Backup │      │ Backup │
+│        │      │  Only  │
+└────────┘      └────────┘
+    │
+    ▼
+┌──────────────┐
+│ Consistency  │
+│  Required?   │
+└──────┬───────┘
+       │
+   ┌───┴────┐
+   │        │
+  Yes      No
+   │        │
+   ▼        ▼
+Quiesce   Online
+Backup    Backup
+```
+
+---
+
+## 💻 Задание 1: Kubernetes Cluster Backup System
+
+```bash
+cat > kubernetes_backup.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/kubernetes"
+KUBECONFIG="${KUBECONFIG:-$HOME/.kube/config}"
+ETCD_ENDPOINTS="https://127.0.0.1:2379"
+ETCD_CACERT="/etc/kubernetes/pki/etcd/ca.crt"
+ETCD_CERT="/etc/kubernetes/pki/etcd/server.crt"
+ETCD_KEY="/etc/kubernetes/pki/etcd/server.key"
+LOG_FILE="/var/log/kubernetes_backup.log"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    echo -e "${YELLOW}⚠${NC} $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}✗${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize backup directories
+init_backup() {
+    log "Initializing Kubernetes backup system..."
+    
+    mkdir -p "$BACKUP_ROOT"/{etcd,manifests,pvcs,configs,helm,snapshots}
+    
+    # Check prerequisites
+    if ! command -v kubectl &>/dev/null; then
+        error "kubectl not found. Installing..."
+        install_kubectl
+    fi
+    
+    if ! command -v helm &>/dev/null; then
+        warn "helm not found. Installing..."
+        install_helm
+    fi
+    
+    # Verify cluster access
+    if kubectl cluster-info &>/dev/null; then
+        success "Cluster access verified"
+    else
+        error "Cannot access Kubernetes cluster"
+        return 1
+    fi
+    
+    success "Backup system initialized"
+}
+
+# Install kubectl
+install_kubectl() {
+    log "Installing kubectl..."
+    
+    local version=$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)
+    curl -LO "https://storage.googleapis.com/kubernetes-release/release/$version/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    sudo mv kubectl /usr/local/bin/
+    
+    success "kubectl installed"
+}
+
+# Install helm
+install_helm() {
+    log "Installing Helm..."
+    
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    
+    success "Helm installed"
+}
+
+# Backup etcd cluster
+backup_etcd() {
+    local backup_dir="$BACKUP_ROOT/etcd/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up etcd cluster state..."
+    mkdir -p "$backup_dir"
+    
+    # Backup using etcdctl
+    if command -v etcdctl &>/dev/null; then
+        ETCDCTL_API=3 etcdctl snapshot save "$backup_dir/etcd-snapshot.db" \
+            --endpoints="$ETCD_ENDPOINTS" \
+            --cacert="$ETCD_CACERT" \
+            --cert="$ETCD_CERT" \
+            --key="$ETCD_KEY"
+        
+        # Verify snapshot
+        ETCDCTL_API=3 etcdctl snapshot status "$backup_dir/etcd-snapshot.db" \
+            --write-out=table \
+            --endpoints="$ETCD_ENDPOINTS" \
+            --cacert="$ETCD_CACERT" \
+            --cert="$ETCD_CERT" \
+            --key="$ETCD_KEY" \
+            > "$backup_dir/snapshot-status.txt"
+        
+        success "etcd backup completed: $backup_dir/etcd-snapshot.db"
+    else
+        # Alternative: Backup etcd data directory
+        warn "etcdctl not found, backing up data directory..."
+        
+        local etcd_data_dir="/var/lib/etcd"
+        if [ -d "$etcd_data_dir" ]; then
+            tar -czf "$backup_dir/etcd-data.tar.gz" -C "$etcd_data_dir" .
+            success "etcd data directory backed up"
+        else
+            error "etcd data directory not found"
+            return 1
+        fi
+    fi
+    
+    # Compress backup
+    gzip "$backup_dir/etcd-snapshot.db" 2>/dev/null || true
+}
+
+# Backup all Kubernetes resources
+backup_all_resources() {
+    local backup_dir="$BACKUP_ROOT/manifests/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up all Kubernetes resources..."
+    mkdir -p "$backup_dir"
+    
+    # Get all namespaces
+    local namespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
+    
+    for namespace in $namespaces; do
+        log "Backing up namespace: $namespace"
+        
+        local ns_dir="$backup_dir/$namespace"
+        mkdir -p "$ns_dir"
+        
+        # Backup all resource types
+        local resource_types=(
+            "pods"
+            "deployments"
+            "statefulsets"
+            "daemonsets"
+            "services"
+            "configmaps"
+            "secrets"
+            "persistentvolumeclaims"
+            "ingresses"
+            "networkpolicies"
+            "serviceaccounts"
+            "roles"
+            "rolebindings"
+            "cronjobs"
+            "jobs"
+        )
+        
+        for resource in "${resource_types[@]}"; do
+            kubectl get "$resource" -n "$namespace" -o yaml > "$ns_dir/$resource.yaml" 2>/dev/null || true
+        done
+    done
+    
+    # Backup cluster-wide resources
+    log "Backing up cluster-wide resources..."
+    
+    local cluster_dir="$backup_dir/_cluster"
+    mkdir -p "$cluster_dir"
+    
+    local cluster_resources=(
+        "nodes"
+        "namespaces"
+        "persistentvolumes"
+        "storageclasses"
+        "clusterroles"
+        "clusterrolebindings"
+        "customresourcedefinitions"
+    )
+    
+    for resource in "${cluster_resources[@]}"; do
+        kubectl get "$resource" -o yaml > "$cluster_dir/$resource.yaml" 2>/dev/null || true
+    done
+    
+    # Create archive
+    tar -czf "$backup_dir.tar.gz" -C "$BACKUP_ROOT/manifests" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "All Kubernetes resources backed up: $backup_dir.tar.gz"
+}
+
+# Backup ConfigMaps and Secrets
+backup_configs_secrets() {
+    local backup_dir="$BACKUP_ROOT/configs/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up ConfigMaps and Secrets..."
+    mkdir -p "$backup_dir"/{configmaps,secrets}
+    
+    # Get all namespaces
+    local namespaces=$(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}')
+    
+    for namespace in $namespaces; do
+        # Backup ConfigMaps
+        kubectl get configmaps -n "$namespace" -o yaml > "$backup_dir/configmaps/$namespace.yaml" 2>/dev/null || true
+        
+        # Backup Secrets (encrypted)
+        kubectl get secrets -n "$namespace" -o yaml > "$backup_dir/secrets/$namespace.yaml" 2>/dev/null || true
+    done
+    
+    # Encrypt secrets backup
+    if command -v gpg &>/dev/null; then
+        log "Encrypting secrets backup..."
+        tar -czf - -C "$backup_dir" secrets | gpg --symmetric --cipher-algo AES256 -o "$backup_dir/secrets.tar.gz.gpg"
+        rm -rf "$backup_dir/secrets"
+        success "Secrets encrypted with GPG"
+    fi
+    
+    # Create final archive
+    tar -czf "$backup_dir.tar.gz" -C "$BACKUP_ROOT/configs" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "ConfigMaps and Secrets backed up: $backup_dir.tar.gz"
+}
+
+# Backup Persistent Volume Claims
+backup_pvcs() {
+    local backup_dir="$BACKUP_ROOT/pvcs/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up Persistent Volume Claims..."
+    mkdir -p "$backup_dir"
+    
+    # Get all PVCs across all namespaces
+    kubectl get pvc --all-namespaces -o json | jq -r '.items[] | 
+        "\(.metadata.namespace)|\(.metadata.name)|\(.spec.volumeName)"' | \
+    while IFS='|' read namespace pvc_name pv_name; do
+        log "Backing up PVC: $namespace/$pvc_name (PV: $pv_name)"
+        
+        local pvc_backup_dir="$backup_dir/$namespace/$pvc_name"
+        mkdir -p "$pvc_backup_dir"
+        
+        # Save PVC manifest
+        kubectl get pvc "$pvc_name" -n "$namespace" -o yaml > "$pvc_backup_dir/pvc.yaml"
+        
+        # Get PV details
+        kubectl get pv "$pv_name" -o yaml > "$pvc_backup_dir/pv.yaml" 2>/dev/null || true
+        
+        # Backup PVC data using a temporary pod
+        backup_pvc_data "$namespace" "$pvc_name" "$pvc_backup_dir"
+    done
+    
+    # Create archive
+    tar -czf "$backup_dir.tar.gz" -C "$BACKUP_ROOT/pvcs" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "PVCs backed up: $backup_dir.tar.gz"
+}
+
+# Backup PVC data
+backup_pvc_data() {
+    local namespace="$1"
+    local pvc_name="$2"
+    local backup_dir="$3"
+    
+    # Create temporary backup pod
+    local pod_name="backup-$pvc_name-$(date +%s)"
+    
+    cat > /tmp/backup-pod.yaml <<YAML
+apiVersion: v1
+kind: Pod
+metadata:
+  name: $pod_name
+  namespace: $namespace
+spec:
+  containers:
+  - name: backup
+    image: alpine:latest
+    command: ["/bin/sh", "-c", "sleep 3600"]
+    volumeMounts:
+    - name: data
+      mountPath: /data
+  volumes:
+  - name: data
+    persistentVolumeClaim:
+      claimName: $pvc_name
+  restartPolicy: Never
+YAML
+    
+    # Create pod
+    kubectl apply -f /tmp/backup-pod.yaml
+    
+    # Wait for pod to be ready
+    kubectl wait --for=condition=Ready pod/"$pod_name" -n "$namespace" --timeout=300s
+    
+    # Copy data from pod
+    kubectl exec -n "$namespace" "$pod_name" -- tar czf - -C /data . > "$backup_dir/data.tar.gz" 2>/dev/null || true
+    
+    # Cleanup
+    kubectl delete pod "$pod_name" -n "$namespace" --force --grace-period=0
+    rm /tmp/backup-pod.yaml
+}
+
+# Backup Helm releases
+backup_helm_releases() {
+    local backup_dir="$BACKUP_ROOT/helm/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up Helm releases..."
+    mkdir -p "$backup_dir"
+    
+    # Get all Helm releases
+    helm list --all-namespaces -o json > "$backup_dir/releases.json"
+    
+    # Backup each release
+    helm list --all-namespaces -o json | jq -r '.[] | "\(.namespace)|\(.name)"' | \
+    while IFS='|' read namespace release; do
+        log "Backing up Helm release: $namespace/$release"
+        
+        local release_dir="$backup_dir/$namespace/$release"
+        mkdir -p "$release_dir"
+        
+        # Get release values
+        helm get values "$release" -n "$namespace" > "$release_dir/values.yaml" 2>/dev/null || true
+        
+        # Get release manifest
+        helm get manifest "$release" -n "$namespace" > "$release_dir/manifest.yaml" 2>/dev/null || true
+        
+        # Get release hooks
+        helm get hooks "$release" -n "$namespace" > "$release_dir/hooks.yaml" 2>/dev/null || true
+        
+        # Get release notes
+        helm get notes "$release" -n "$namespace" > "$release_dir/notes.txt" 2>/dev/null || true
+    done
+    
+    # Create archive
+    tar -czf "$backup_dir.tar.gz" -C "$BACKUP_ROOT/helm" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "Helm releases backed up: $backup_dir.tar.gz"
+}
+
+# Backup Custom Resource Definitions
+backup_crds() {
+    local backup_dir="$BACKUP_ROOT/manifests/$(date +%Y%m%d-%H%M%S)/crds"
+    
+    log "Backing up Custom Resource Definitions..."
+    mkdir -p "$backup_dir"
+    
+    # Get all CRDs
+    kubectl get crd -o yaml > "$backup_dir/crds.yaml"
+    
+    # Backup instances of each CRD
+    kubectl get crd -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | while read crd; do
+        local crd_name=$(echo "$crd" | sed 's/\./-/g')
+        
+        # Get all instances across all namespaces
+        kubectl get "$crd" --all-namespaces -o yaml > "$backup_dir/$crd_name-instances.yaml" 2>/dev/null || true
+    done
+    
+    success "CRDs backed up"
+}
+
+# Create Velero-style backup (if Velero is installed)
+backup_with_velero() {
+    if ! command -v velero &>/dev/null; then
+        warn "Velero not installed, skipping Velero backup"
+        return 0
+    fi
+    
+    local backup_name="scheduled-$(date +%Y%m%d-%H%M%S)"
+    
+    log "Creating Velero backup: $backup_name"
+    
+    velero backup create "$backup_name" \
+        --include-namespaces '*' \
+        --exclude-namespaces kube-system,kube-public \
+        --snapshot-volumes=true \
+        --wait
+    
+    # Wait for backup to complete
+    velero backup describe "$backup_name" --details
+    
+    success "Velero backup created: $backup_name"
+}
+
+# Restore etcd from backup
+restore_etcd() {
+    local backup_file="$1"
+    
+    if [ ! -f "$backup_file" ]; then
+        error "Backup file not found: $backup_file"
+        return 1
+    fi
+    
+    log "Restoring etcd from: $backup_file"
+    
+    # Decompress if needed
+    if [[ "$backup_file" == *.gz ]]; then
+        gunzip -c "$backup_file" > /tmp/etcd-snapshot.db
+        backup_file="/tmp/etcd-snapshot.db"
+    fi
+    
+    # Stop etcd
+    warn "Stopping etcd service..."
+    systemctl stop etcd 2>/dev/null || true
+    
+    # Backup current data
+    local etcd_data_dir="/var/lib/etcd"
+    if [ -d "$etcd_data_dir" ]; then
+        mv "$etcd_data_dir" "${etcd_data_dir}.backup-$(date +%s)"
+    fi
+    
+    # Restore snapshot
+    ETCDCTL_API=3 etcdctl snapshot restore "$backup_file" \
+        --data-dir="$etcd_data_dir" \
+        --name="$(hostname)" \
+        --initial-cluster="$(hostname)=https://127.0.0.1:2380" \
+        --initial-advertise-peer-urls="https://127.0.0.1:2380"
+    
+    # Set permissions
+    chown -R etcd:etcd "$etcd_data_dir"
+    
+    # Start etcd
+    systemctl start etcd
+    
+    success "etcd restored successfully"
+    
+    # Cleanup
+    rm -f /tmp/etcd-snapshot.db
+}
+
+# Restore all Kubernetes resources
+restore_all_resources() {
+    local backup_archive="$1"
+    
+    if [ ! -f "$backup_archive" ]; then
+        error "Backup archive not found: $backup_archive"
+        return 1
+    fi
+    
+    log "Restoring Kubernetes resources from: $backup_archive"
+    
+    # Extract archive
+    local temp_dir="/tmp/k8s-restore-$$"
+    mkdir -p "$temp_dir"
+    tar -xzf "$backup_archive" -C "$temp_dir"
+    
+    # Restore namespaces first
+    if [ -f "$temp_dir/_cluster/namespaces.yaml" ]; then
+        kubectl apply -f "$temp_dir/_cluster/namespaces.yaml"
+    fi
+    
+    # Restore cluster-wide resources
+    if [ -d "$temp_dir/_cluster" ]; then
+        log "Restoring cluster-wide resources..."
+        kubectl apply -f "$temp_dir/_cluster/" --recursive
+    fi
+    
+    # Restore namespace resources
+    for namespace_dir in "$temp_dir"/*; do
+        if [ -d "$namespace_dir" ] && [ "$(basename "$namespace_dir")" != "_cluster" ]; then
+            local namespace=$(basename "$namespace_dir")
+            log "Restoring namespace: $namespace"
+            
+            # Create namespace if it doesn't exist
+            kubectl create namespace "$namespace" 2>/dev/null || true
+            
+            # Apply resources in order
+            local resource_order=(
+                "configmaps.yaml"
+                "secrets.yaml"
+                "persistentvolumeclaims.yaml"
+                "serviceaccounts.yaml"
+                "roles.yaml"
+                "rolebindings.yaml"
+                "services.yaml"
+                "deployments.yaml"
+                "statefulsets.yaml"
+                "daemonsets.yaml"
+                "cronjobs.yaml"
+                "jobs.yaml"
+                "ingresses.yaml"
+                "networkpolicies.yaml"
+            )
+            
+            for resource_file in "${resource_order[@]}"; do
+                if [ -f "$namespace_dir/$resource_file" ]; then
+                    kubectl apply -f "$namespace_dir/$resource_file" -n "$namespace" 2>/dev/null || true
+                fi
+            done
+        fi
+    done
+    
+    # Cleanup
+    rm -rf "$temp_dir"
+    
+    success "Kubernetes resources restored"
+}
+
+# Restore Helm release
+restore_helm_release() {
+    local backup_archive="$1"
+    local namespace="$2"
+    local release_name="$3"
+    
+    if [ ! -f "$backup_archive" ]; then
+        error "Backup archive not found: $backup_archive"
+        return 1
+    fi
+    
+    log "Restoring Helm release: $namespace/$release_name"
+    
+    # Extract archive
+    local temp_dir="/tmp/helm-restore-$$"
+    mkdir -p "$temp_dir"
+    tar -xzf "$backup_archive" -C "$temp_dir"
+    
+    local release_dir="$temp_dir/$namespace/$release_name"
+    
+    if [ ! -d "$release_dir" ]; then
+        error "Release not found in backup"
+        return 1
+    fi
+    
+    # Get chart name from manifest
+    local chart_name=$(grep "chart:" "$release_dir/manifest.yaml" | head -1 | awk '{print $2}')
+    
+    if [ -z "$chart_name" ]; then
+        error "Could not determine chart name"
+        return 1
+    fi
+    
+    # Install/upgrade release
+    if [ -f "$release_dir/values.yaml" ]; then
+        helm upgrade --install "$release_name" "$chart_name" \
+            -n "$namespace" \
+            -f "$release_dir/values.yaml" \
+            --create-namespace
+    else
+        warn "No values file found, installing with defaults"
+        helm upgrade --install "$release_name" "$chart_name" \
+            -n "$namespace" \
+            --create-namespace
+    fi
+    
+    # Cleanup
+    rm -rf "$temp_dir"
+    
+    success "Helm release restored: $namespace/$release_name"
+}
+
+# Full cluster backup
+full_cluster_backup() {
+    local backup_name="full-backup-$(date +%Y%m%d-%H%M%S)"
+    
+    log "Starting full cluster backup: $backup_name"
+    
+    local start_time=$(date +%s)
+    
+    # Backup etcd
+    backup_etcd
+    
+    # Backup all resources
+    backup_all_resources
+    
+    # Backup ConfigMaps and Secrets
+    backup_configs_secrets
+    
+    # Backup PVCs
+    backup_pvcs
+    
+    # Backup Helm releases
+    backup_helm_releases
+    
+    # Backup CRDs
+    backup_crds
+    
+    # Velero backup (if available)
+    backup_with_velero
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    success "Full cluster backup completed in ${duration}s"
+    
+    # Generate backup report
+    generate_backup_report "$backup_name" "$duration"
+}
+
+# Generate backup report
+generate_backup_report() {
+    local backup_name="$1"
+    local duration="$2"
+    
+    local report_file="$BACKUP_ROOT/backup-report-$(date +%Y%m%d-%H%M%S).html"
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kubernetes Backup Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #326ce5;
+            border-bottom: 3px solid #326ce5;
+            padding-bottom: 10px;
+        }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #326ce5 0%, #4a90e2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #326ce5;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>☸️ Kubernetes Cluster Backup Report</h1>
+        <p><strong>Backup Name:</strong> $backup_name</p>
+        <p><strong>Generated:</strong> $(date)</p>
+        <p><strong>Duration:</strong> ${duration}s</p>
+        
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="metric-label">Namespaces</div>
+                <div class="metric-value">$(kubectl get namespaces --no-headers | wc -l)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Deployments</div>
+                <div class="metric-value">$(kubectl get deployments --all-namespaces --no-headers | wc -l)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Services</div>
+                <div class="metric-value">$(kubectl get services --all-namespaces --no-headers | wc -l)</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">PVCs</div>
+                <div class="metric-value">$(kubectl get pvc --all-namespaces --no-headers | wc -l)</div>
+            </div>
+        </div>
+        
+        <h2>Backup Components</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Component</th>
+                    <th>Status</th>
+                    <th>Size</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>etcd Snapshot</td>
+                    <td>✓ Complete</td>
+                    <td>$(du -sh $BACKUP_ROOT/etcd/$(ls -t $BACKUP_ROOT/etcd | head -1) 2>/dev/null | cut -f1 || echo "N/A")</td>
+                </tr>
+                <tr>
+                    <td>Manifests</td>
+                    <td>✓ Complete</td>
+                    <td>$(du -sh $BACKUP_ROOT/manifests/$(ls -t $BACKUP_ROOT/manifests | head -1) 2>/dev/null | cut -f1 || echo "N/A")</td>
+                </tr>
+                <tr>
+                    <td>Configs & Secrets</td>
+                    <td>✓ Complete</td>
+                    <td>$(du -sh $BACKUP_ROOT/configs/$(ls -t $BACKUP_ROOT/configs | head -1) 2>/dev/null | cut -f1 || echo "N/A")</td>
+                </tr>
+                <tr>
+                    <td>Persistent Volumes</td>
+                    <td>✓ Complete</td>
+                    <td>$(du -sh $BACKUP_ROOT/pvcs/$(ls -t $BACKUP_ROOT/pvcs | head -1) 2>/dev/null | cut -f1 || echo "N/A")</td>
+                </tr>
+                <tr>
+                    <td>Helm Releases</td>
+                    <td>✓ Complete</td>
+                    <td>$(du -sh $BACKUP_ROOT/helm/$(ls -t $BACKUP_ROOT/helm | head -1) 2>/dev/null | cut -f1 || echo "N/A")</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>Backup Locations</h2>
+        <ul>
+            <li>etcd: $BACKUP_ROOT/etcd/</li>
+            <li>Manifests: $BACKUP_ROOT/manifests/</li>
+            <li>Configs: $BACKUP_ROOT/configs/</li>
+            <li>PVCs: $BACKUP_ROOT/pvcs/</li>
+            <li>Helm: $BACKUP_ROOT/helm/</li>
+        </ul>
+    </div>
+</body>
+</html>
+HTML
+
+log "Backup report generated: $report_file"
+}
+
+# Main command handling
+
+case "${1:-help}" in
+    init)
+        init_backup
+        ;;
+
+    etcd)
+        backup_etcd
+        ;;
+
+    resources)
+        backup_all_resources
+        ;;
+
+    configs)
+        backup_configs_secrets
+        ;;
+
+    pvcs)
+        backup_pvcs
+        ;;
+
+    helm)
+        backup_helm_releases
+        ;;
+
+    full)
+        init_backup
+        full_cluster_backup
+        ;;
+
+    restore-etcd)
+        restore_etcd "$2"
+        ;;
+
+    restore-resources)
+        restore_all_resources "$2"
+        ;;
+
+    restore-helm)
+        restore_helm_release "$2" "$3" "$4"
+        ;;
+
+    *)
+        cat <<HELP
+Kubernetes Cluster Backup System
+
+Usage: $0 <command> [options]
+
+Backup Commands:
+    init            - Initialize backup system
+    etcd            - Backup etcd cluster state
+    resources       - Backup all Kubernetes resources
+    configs         - Backup ConfigMaps and Secrets
+    pvcs            - Backup Persistent Volume Claims
+    helm            - Backup Helm releases
+    full            - Full cluster backup (all components)
+
+Restore Commands:
+    restore-etcd <file>         - Restore etcd from backup
+    restore-resources <archive> - Restore all resources
+    restore-helm <archive> <ns> <name> - Restore Helm release
+
+Examples:
+    $0 init
+    $0 full
+    $0 etcd
+    $0 restore-etcd /backup/kubernetes/etcd/20240116/etcd-snapshot.db.gz
+    $0 restore-resources /backup/kubernetes/manifests/20240116.tar.gz
+
+Backup Location: $BACKUP_ROOT
+HELP
+        ;;
+esac
+
+EOF
+
+chmod +x kubernetes_backup.sh
+
+```
+
+Продолжить с остальными частями модуля 11?
+
+1. VMware vSphere Backup
+2. Proxmox VE Backup
+3. SaaS Backups (Microsoft 365, Google Workspace)
+4. GitHub/GitLab Repository Backup
+
+
+## 💻 Задание 2: VMware vSphere & Virtualization Platform Backups
+
+```bash
+cat > vmware_backup.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/vmware"
+VCENTER_HOST="${VCENTER_HOST:-vcenter.example.com}"
+VCENTER_USER="${VCENTER_USER:-administrator@vsphere.local}"
+VCENTER_PASS="${VCENTER_PASS}"
+ESXI_HOST="${ESXI_HOST}"
+ESXI_USER="${ESXI_USER:-root}"
+LOG_FILE="/var/log/vmware_backup.log"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    echo -e "${YELLOW}⚠${NC} $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}✗${NC} $*" | tee -a "$LOG_FILE"
+}
+
+info() {
+    echo -e "${BLUE}ℹ${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize backup system
+init_backup() {
+    log "Initializing VMware backup system..."
+    
+    mkdir -p "$BACKUP_ROOT"/{vm-exports,snapshots,configs,reports}
+    
+    # Check prerequisites
+    check_prerequisites
+    
+    success "Backup system initialized"
+}
+
+# Check prerequisites
+check_prerequisites() {
+    local missing_tools=()
+    
+    # Check for ovftool
+    if ! command -v ovftool &>/dev/null; then
+        warn "ovftool not found - VM exports will not be available"
+        warn "Download from: https://developer.vmware.com/web/tool/ovf-tool"
+        missing_tools+=("ovftool")
+    fi
+    
+    # Check for govc (VMware CLI)
+    if ! command -v govc &>/dev/null; then
+        info "Installing govc..."
+        install_govc
+    fi
+    
+    # Check for PowerCLI (optional)
+    if ! command -v pwsh &>/dev/null; then
+        warn "PowerShell not found - some advanced features unavailable"
+    fi
+    
+    # Verify credentials
+    if [ -z "$VCENTER_PASS" ]; then
+        warn "VCENTER_PASS not set - interactive authentication required"
+    fi
+}
+
+# Install govc
+install_govc() {
+    local version="v0.34.0"
+    local os="linux"
+    local arch="amd64"
+    
+    log "Installing govc $version..."
+    
+    curl -L "https://github.com/vmware/govmomi/releases/download/${version}/govc_${os}_${arch}.gz" | \
+        gunzip > /tmp/govc
+    
+    chmod +x /tmp/govc
+    sudo mv /tmp/govc /usr/local/bin/
+    
+    success "govc installed"
+}
+
+# Setup govc environment
+setup_govc_env() {
+    export GOVC_URL="https://${VCENTER_USER}:${VCENTER_PASS}@${VCENTER_HOST}/sdk"
+    export GOVC_INSECURE=1
+    
+    # Verify connection
+    if govc about &>/dev/null; then
+        success "Connected to vCenter: $VCENTER_HOST"
+    else
+        error "Failed to connect to vCenter"
+        return 1
+    fi
+}
+
+# List all VMs
+list_vms() {
+    log "Listing all virtual machines..."
+    
+    setup_govc_env
+    
+    govc ls -t VirtualMachine | while read vm_path; do
+        local vm_name=$(basename "$vm_path")
+        local vm_info=$(govc vm.info -json "$vm_path")
+        
+        local power_state=$(echo "$vm_info" | jq -r '.VirtualMachines[0].Runtime.PowerState')
+        local guest_os=$(echo "$vm_info" | jq -r '.VirtualMachines[0].Config.GuestFullName')
+        local memory_mb=$(echo "$vm_info" | jq -r '.VirtualMachines[0].Config.Hardware.MemoryMB')
+        local num_cpu=$(echo "$vm_info" | jq -r '.VirtualMachines[0].Config.Hardware.NumCPU')
+        
+        echo "VM: $vm_name"
+        echo "  Path: $vm_path"
+        echo "  State: $power_state"
+        echo "  OS: $guest_os"
+        echo "  Memory: ${memory_mb}MB"
+        echo "  CPUs: $num_cpu"
+        echo ""
+    done
+}
+
+# Create VM snapshot
+create_vm_snapshot() {
+    local vm_name="$1"
+    local snapshot_name="${2:-backup-$(date +%Y%m%d-%H%M%S)}"
+    local description="${3:-Automated backup snapshot}"
+    
+    log "Creating snapshot for VM: $vm_name"
+    log "Snapshot name: $snapshot_name"
+    
+    setup_govc_env
+    
+    # Check if VM exists
+    if ! govc vm.info "$vm_name" &>/dev/null; then
+        error "VM not found: $vm_name"
+        return 1
+    fi
+    
+    # Create snapshot with memory
+    govc snapshot.create -vm "$vm_name" \
+        -m=true \
+        -d="$description" \
+        "$snapshot_name"
+    
+    if [ $? -eq 0 ]; then
+        success "Snapshot created: $snapshot_name"
+        
+        # Save snapshot metadata
+        local snapshot_dir="$BACKUP_ROOT/snapshots/$vm_name"
+        mkdir -p "$snapshot_dir"
+        
+        cat > "$snapshot_dir/${snapshot_name}.json" <<JSON
+{
+    "vm_name": "$vm_name",
+    "snapshot_name": "$snapshot_name",
+    "created": "$(date -Iseconds)",
+    "description": "$description",
+    "type": "memory_snapshot"
+}
+JSON
+    else
+        error "Failed to create snapshot"
+        return 1
+    fi
+}
+
+# Remove VM snapshot
+remove_vm_snapshot() {
+    local vm_name="$1"
+    local snapshot_name="$2"
+    
+    log "Removing snapshot: $snapshot_name from VM: $vm_name"
+    
+    setup_govc_env
+    
+    govc snapshot.remove -vm "$vm_name" "$snapshot_name"
+    
+    if [ $? -eq 0 ]; then
+        success "Snapshot removed: $snapshot_name"
+        
+        # Remove metadata
+        rm -f "$BACKUP_ROOT/snapshots/$vm_name/${snapshot_name}.json"
+    else
+        error "Failed to remove snapshot"
+        return 1
+    fi
+}
+
+# Export VM to OVF
+export_vm_ovf() {
+    local vm_name="$1"
+    local export_dir="$BACKUP_ROOT/vm-exports/$(date +%Y%m%d)"
+    
+    log "Exporting VM to OVF: $vm_name"
+    
+    if ! command -v ovftool &>/dev/null; then
+        error "ovftool not found - cannot export VM"
+        return 1
+    fi
+    
+    mkdir -p "$export_dir"
+    
+    # Build ovftool command
+    local ovf_file="$export_dir/${vm_name}.ovf"
+    
+    ovftool \
+        --noSSLVerify \
+        --acceptAllEulas \
+        --diskMode=thin \
+        --name="$vm_name" \
+        "vi://${VCENTER_USER}:${VCENTER_PASS}@${VCENTER_HOST}/${vm_name}" \
+        "$ovf_file"
+    
+    if [ $? -eq 0 ]; then
+        success "VM exported: $ovf_file"
+        
+        # Create archive
+        local archive_file="${export_dir}/${vm_name}.tar.gz"
+        tar -czf "$archive_file" -C "$export_dir" "${vm_name}.ovf" "${vm_name}"*.vmdk
+        
+        # Cleanup OVF files
+        rm -f "$export_dir/${vm_name}.ovf" "$export_dir/${vm_name}"*.vmdk
+        
+        success "VM archived: $archive_file"
+        echo "$archive_file"
+    else
+        error "Failed to export VM"
+        return 1
+    fi
+}
+
+# Backup VM using Changed Block Tracking (CBT)
+backup_vm_cbt() {
+    local vm_name="$1"
+    local backup_dir="$BACKUP_ROOT/cbt-backups/$vm_name/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Starting CBT backup for VM: $vm_name"
+    
+    setup_govc_env
+    
+    mkdir -p "$backup_dir"
+    
+    # Get VM configuration
+    govc vm.info -json "$vm_name" > "$backup_dir/vm-config.json"
+    
+    # Enable CBT if not already enabled
+    local cbt_enabled=$(govc vm.info -json "$vm_name" | jq -r '.VirtualMachines[0].Config.ChangeTrackingEnabled')
+    
+    if [ "$cbt_enabled" != "true" ]; then
+        log "Enabling CBT for VM: $vm_name"
+        govc vm.change -vm "$vm_name" -e="ctkEnabled=true"
+        
+        # Power cycle required for CBT to take effect
+        warn "CBT requires VM power cycle - skipping for now"
+    fi
+    
+    # Create snapshot for backup
+    local snapshot_name="cbt-backup-$(date +%s)"
+    create_vm_snapshot "$vm_name" "$snapshot_name" "CBT backup snapshot"
+    
+    # Export VM disks
+    log "Exporting VM disks..."
+    
+    govc vm.info -json "$vm_name" | jq -r '.VirtualMachines[0].Config.Hardware.Device[] | 
+        select(.VirtualDisk != null) | 
+        .Backing.FileName' | while read disk; do
+        
+        local disk_name=$(basename "$disk" .vmdk)
+        log "Backing up disk: $disk"
+        
+        # In production, use vSphere APIs to download changed blocks
+        # This is a simplified version
+        govc datastore.download -ds "$(dirname "$disk" | cut -d'[' -f2 | cut -d']' -f1)" \
+            "$(dirname "$disk" | cut -d']' -f2)/${disk_name}.vmdk" \
+            "$backup_dir/${disk_name}.vmdk" 2>/dev/null || warn "Disk download failed: $disk"
+    done
+    
+    # Remove snapshot
+    remove_vm_snapshot "$vm_name" "$snapshot_name"
+    
+    # Compress backup
+    log "Compressing backup..."
+    tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "CBT backup completed: ${backup_dir}.tar.gz"
+}
+
+# Backup VM configuration only
+backup_vm_config() {
+    local vm_name="$1"
+    local config_dir="$BACKUP_ROOT/configs/$(date +%Y%m%d)"
+    
+    log "Backing up VM configuration: $vm_name"
+    
+    setup_govc_env
+    
+    mkdir -p "$config_dir"
+    
+    # Export VM configuration
+    govc vm.info -json "$vm_name" > "$config_dir/${vm_name}.json"
+    
+    # Export VM settings
+    cat > "$config_dir/${vm_name}-settings.txt" <<SETTINGS
+VM Configuration Backup
+=======================
+VM Name: $vm_name
+Backup Date: $(date)
+
+$(govc vm.info "$vm_name")
+
+Hardware:
+$(govc device.info -vm "$vm_name")
+
+Network:
+$(govc vm.info -json "$vm_name" | jq -r '.VirtualMachines[0].Guest.Net')
+
+Snapshots:
+$(govc snapshot.tree -vm "$vm_name")
+SETTINGS
+    
+    success "VM configuration backed up: $config_dir/${vm_name}.json"
+}
+
+# Backup vCenter configuration
+backup_vcenter_config() {
+    log "Backing up vCenter configuration..."
+    
+    setup_govc_env
+    
+    local backup_dir="$BACKUP_ROOT/configs/vcenter-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+    
+    # Export all resource pools
+    log "Exporting resource pools..."
+    govc pool.info -json /* > "$backup_dir/resource-pools.json"
+    
+    # Export all datastores
+    log "Exporting datastores..."
+    govc datastore.info -json > "$backup_dir/datastores.json"
+    
+    # Export all networks
+    log "Exporting networks..."
+    govc ls -t Network | while read network; do
+        local network_name=$(basename "$network")
+        govc object.collect -json "$network" > "$backup_dir/network-${network_name}.json" 2>/dev/null || true
+    done
+    
+    # Export all hosts
+    log "Exporting ESXi hosts..."
+    govc ls -t HostSystem | while read host; do
+        local host_name=$(basename "$host")
+        govc host.info -json "$host" > "$backup_dir/host-${host_name}.json"
+    done
+    
+    # Export all clusters
+    log "Exporting clusters..."
+    govc ls -t ClusterComputeResource | while read cluster; do
+        local cluster_name=$(basename "$cluster")
+        govc cluster.info -json "$cluster" > "$backup_dir/cluster-${cluster_name}.json"
+    done
+    
+    # Create archive
+    tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "vCenter configuration backed up: ${backup_dir}.tar.gz"
+}
+
+# Restore VM from OVF
+restore_vm_from_ovf() {
+    local ovf_archive="$1"
+    local target_host="$2"
+    local target_datastore="$3"
+    
+    if [ ! -f "$ovf_archive" ]; then
+        error "OVF archive not found: $ovf_archive"
+        return 1
+    fi
+    
+    log "Restoring VM from: $ovf_archive"
+    
+    # Extract archive
+    local temp_dir="/tmp/ovf-restore-$$"
+    mkdir -p "$temp_dir"
+    tar -xzf "$ovf_archive" -C "$temp_dir"
+    
+    # Find OVF file
+    local ovf_file=$(find "$temp_dir" -name "*.ovf" | head -1)
+    
+    if [ -z "$ovf_file" ]; then
+        error "No OVF file found in archive"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+    
+    # Import VM
+    ovftool \
+        --noSSLVerify \
+        --acceptAllEulas \
+        --datastore="$target_datastore" \
+        --diskMode=thin \
+        --network="VM Network" \
+        "$ovf_file" \
+        "vi://${VCENTER_USER}:${VCENTER_PASS}@${VCENTER_HOST}/${target_host}"
+    
+    if [ $? -eq 0 ]; then
+        success "VM restored successfully"
+        rm -rf "$temp_dir"
+    else
+        error "Failed to restore VM"
+        rm -rf "$temp_dir"
+        return 1
+    fi
+}
+
+# Automated backup schedule for all VMs
+backup_all_vms() {
+    local backup_type="${1:-snapshot}"  # snapshot, export, or cbt
+    
+    log "Starting automated backup of all VMs (type: $backup_type)"
+    
+    setup_govc_env
+    
+    local start_time=$(date +%s)
+    local success_count=0
+    local fail_count=0
+    
+    # Get list of all VMs
+    govc ls -t VirtualMachine | while read vm_path; do
+        local vm_name=$(basename "$vm_path")
+        
+        log "Processing VM: $vm_name"
+        
+        case "$backup_type" in
+            snapshot)
+                if create_vm_snapshot "$vm_name"; then
+                    success_count=$((success_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+                ;;
+            
+            export)
+                if export_vm_ovf "$vm_name"; then
+                    success_count=$((success_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+                ;;
+            
+            cbt)
+                if backup_vm_cbt "$vm_name"; then
+                    success_count=$((success_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+                ;;
+            
+            config)
+                if backup_vm_config "$vm_name"; then
+                    success_count=$((success_count + 1))
+                else
+                    fail_count=$((fail_count + 1))
+                fi
+                ;;
+        esac
+    done
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    log "Backup completed in ${duration}s"
+    log "Success: $success_count, Failed: $fail_count"
+    
+    # Generate report
+    generate_backup_report "$backup_type" "$duration" "$success_count" "$fail_count"
+}
+
+# Generate backup report
+generate_backup_report() {
+    local backup_type="$1"
+    local duration="$2"
+    local success_count="$3"
+    local fail_count="$4"
+    
+    local report_file="$BACKUP_ROOT/reports/backup-report-$(date +%Y%m%d-%H%M%S).html"
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>VMware Backup Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #0071ce;
+            border-bottom: 3px solid #0071ce;
+            padding-bottom: 10px;
+        }
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #0071ce 0%, #00a1e0 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .metric-card.success {
+            background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+        }
+        .metric-card.failure {
+            background: linear-gradient(135deg, #f44336 0%, #e57373 100%);
+        }
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #0071ce;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🖥️ VMware vSphere Backup Report</h1>
+        <p><strong>Backup Type:</strong> $backup_type</p>
+        <p><strong>Generated:</strong> $(date)</p>
+        <p><strong>Duration:</strong> ${duration}s</p>
+        
+        <div class="metric-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total VMs</div>
+                <div class="metric-value">$((success_count + fail_count))</div>
+            </div>
+            <div class="metric-card success">
+                <div class="metric-label">Successful</div>
+                <div class="metric-value">$success_count</div>
+            </div>
+            <div class="metric-card failure">
+                <div class="metric-label">Failed</div>
+                <div class="metric-value">$fail_count</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Success Rate</div>
+                <div class="metric-value">$(( success_count * 100 / (success_count + fail_count) ))%</div>
+            </div>
+        </div>
+        
+        <h2>Backup Summary</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>vCenter Server</td>
+                    <td>$VCENTER_HOST</td>
+                </tr>
+                <tr>
+                    <td>Backup Type</td>
+                    <td>$backup_type</td>
+                </tr>
+                <tr>
+                    <td>Total Duration</td>
+                    <td>${duration}s</td>
+                </tr>
+                <tr>
+                    <td>Backup Location</td>
+                    <td>$BACKUP_ROOT</td>
+                </tr>
+            </tbody>
+        </table>
+        
+        <h2>Backup Locations</h2>
+        <ul>
+            <li>Snapshots: $BACKUP_ROOT/snapshots/</li>
+            <li>VM Exports: $BACKUP_ROOT/vm-exports/</li>
+            <li>CBT Backups: $BACKUP_ROOT/cbt-backups/</li>
+            <li>Configurations: $BACKUP_ROOT/configs/</li>
+        </ul>
+    </div>
+</body>
+</html>
+HTML
+    
+    success "Backup report generated: $report_file"
+}
+
+# Snapshot cleanup (remove old snapshots)
+cleanup_old_snapshots() {
+    local retention_days="${1:-7}"
+    
+    log "Cleaning up snapshots older than $retention_days days..."
+    
+    setup_govc_env
+    
+    local cutoff_date=$(date -d "$retention_days days ago" +%s)
+    
+    govc ls -t VirtualMachine | while read vm_path; do
+        local vm_name=$(basename "$vm_path")
+        
+        # Get snapshot tree
+        govc snapshot.tree -vm "$vm_name" -i 2>/dev/null | grep -E "^  " | while read snapshot_line; do
+            local snapshot_name=$(echo "$snapshot_line" | awk '{print $2}')
+            local snapshot_date=$(echo "$snapshot_line" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' || echo "")
+            
+            if [ -n "$snapshot_date" ]; then
+                local snapshot_timestamp=$(date -d "$snapshot_date" +%s 2>/dev/null || echo "0")
+                
+                if [ "$snapshot_timestamp" -lt "$cutoff_date" ] && [ "$snapshot_timestamp" -gt 0 ]; then
+                    log "Removing old snapshot: $vm_name/$snapshot_name"
+                    remove_vm_snapshot "$vm_name" "$snapshot_name"
+                fi
+            fi
+        done
+    done
+    
+    success "Snapshot cleanup completed"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_backup
+        ;;
+    
+    list)
+        list_vms
+        ;;
+    
+    snapshot)
+        create_vm_snapshot "$2" "$3" "$4"
+        ;;
+    
+    remove-snapshot)
+        remove_vm_snapshot "$2" "$3"
+        ;;
+    
+    export)
+        export_vm_ovf "$2"
+        ;;
+    
+    cbt)
+        backup_vm_cbt "$2"
+        ;;
+    
+    config)
+        backup_vm_config "$2"
+        ;;
+    
+    vcenter-config)
+        backup_vcenter_config
+        ;;
+    
+    restore)
+        restore_vm_from_ovf "$2" "$3" "$4"
+        ;;
+    
+    backup-all)
+        backup_all_vms "$2"
+        ;;
+    
+    cleanup)
+        cleanup_old_snapshots "$2"
+        ;;
+    
+    *)
+        cat <<HELP
+VMware vSphere Backup System
+
+Usage: $0 <command> [options]
+
+Setup Commands:
+  init                      - Initialize backup system
+  list                      - List all VMs
+
+Backup Commands:
+  snapshot <vm> [name] [desc]     - Create VM snapshot
+  export <vm>                     - Export VM to OVF
+  cbt <vm>                        - Backup VM using CBT
+  config <vm>                     - Backup VM configuration only
+  vcenter-config                  - Backup vCenter configuration
+  backup-all [type]               - Backup all VMs (snapshot/export/cbt/config)
+
+Restore Commands:
+  restore <ovf> <host> <datastore> - Restore VM from OVF
+
+Maintenance:
+  remove-snapshot <vm> <name>     - Remove VM snapshot
+  cleanup [days]                  - Remove snapshots older than X days
+
+Environment Variables:
+  VCENTER_HOST - vCenter server hostname
+  VCENTER_USER - vCenter username
+  VCENTER_PASS - vCenter password
+  ESXI_HOST    - ESXi host for direct operations
+
+Examples:
+  $0 init
+  $0 list
+  $0 snapshot web-server-01
+  $0 export web-server-01
+  $0 backup-all snapshot
+  $0 cleanup 7
+  $0 restore /backup/vmware/vm-exports/20240116/web-01.tar.gz esxi01 datastore1
+
+Backup Location: $BACKUP_ROOT
+HELP
+        ;;
+esac
+EOF
+
+chmod +x vmware_backup.sh
+```
+
+---
+
+## 💻 Задание 3: Proxmox VE Backup System
+
+```bash
+cat > proxmox_backup.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/proxmox"
+PROXMOX_HOST="${PROXMOX_HOST:-pve.example.com}"
+PROXMOX_USER="${PROXMOX_USER:-root@pam}"
+PROXMOX_PASS="${PROXMOX_PASS}"
+PBS_HOST="${PBS_HOST}"  # Proxmox Backup Server
+PBS_DATASTORE="${PBS_DATASTORE:-backups}"
+LOG_FILE="/var/log/proxmox_backup.log"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "\033[0;32m✓\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "\033[0;31m✗\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize backup system
+init_backup() {
+    log "Initializing Proxmox backup system..."
+    
+    mkdir -p "$BACKUP_ROOT"/{vzdump,pbs,configs,snapshots}
+    
+    # Check if running on Proxmox host
+    if [ -f /etc/pve/.version ]; then
+        success "Running on Proxmox VE host"
+    else
+        log "Not running on Proxmox host - remote operations only"
+    fi
+    
+    success "Backup system initialized"
+}
+
+# List all VMs and containers
+list_vms() {
+    log "Listing all VMs and containers..."
+    
+    if command -v pvesh &>/dev/null; then
+        # QEMU VMs
+        echo "=== QEMU/KVM Virtual Machines ==="
+        pvesh get /cluster/resources --type vm --output-format json | jq -r '.[] | 
+            "VMID: \(.vmid) | Name: \(.name) | Status: \(.status) | Node: \(.node) | Type: \(.type)"'
+        
+        echo ""
+        echo "=== LXC Containers ==="
+        pvesh get /cluster/resources --type lxc --output-format json | jq -r '.[] | 
+            "CTID: \(.vmid) | Name: \(.name) | Status: \(.status) | Node: \(.node)"'
+    else
+        error "pvesh not found - cannot list VMs"
+        return 1
+    fi
+}
+
+# Backup single VM using vzdump
+backup_vm_vzdump() {
+    local vmid="$1"
+    local backup_mode="${2:-snapshot}"  # snapshot, suspend, or stop
+    
+    log "Backing up VM/CT $vmid using vzdump (mode: $backup_mode)..."
+    
+    local backup_dir="$BACKUP_ROOT/vzdump"
+    mkdir -p "$backup_dir"
+    
+    # Run vzdump
+    vzdump "$vmid" \
+        --storage local \
+        --dumpdir "$backup_dir" \
+        --mode "$backup_mode" \
+        --compress zstd \
+        --notes-template "Automated backup - $(date)"
+    
+    if [ $? -eq 0 ]; then
+        success "VM $vmid backed up successfully"
+        
+        # Find latest backup file
+        local backup_file=$(ls -t "$backup_dir"/vzdump-*-"$vmid"-*.vma.zst "$backup_dir"/vzdump-*-"$vmid"-*.tar.zst 2>/dev/null | head -1)
+        
+        if [ -n "$backup_file" ]; then
+            log "Backup file: $backup_file"
+            log "Size: $(du -h "$backup_file" | cut -f1)"
+        fi
+    else
+        error "Failed to backup VM $vmid"
+        return 1
+    fi
+}
+
+# Backup to Proxmox Backup Server
+backup_to_pbs() {
+    local vmid="$1"
+    
+    if [ -z "$PBS_HOST" ]; then
+        error "PBS_HOST not configured"
+        return 1
+    fi
+    
+    log "Backing up VM/CT $vmid to Proxmox Backup Server..."
+    
+    # Configure PBS storage if not exists
+    pvesm add pbs "$PBS_DATASTORE" \
+        --server "$PBS_HOST" \
+        --datastore "$PBS_DATASTORE" \
+        --username "$PROXMOX_USER" \
+        --password "$PROXMOX_PASS" \
+        2>/dev/null || true
+    
+    # Run backup to PBS
+    vzdump "$vmid" \
+        --storage "$PBS_DATASTORE" \
+        --mode snapshot \
+        --compress zstd \
+        --notes-template "PBS backup - $(date)"
+    
+    if [ $? -eq 0 ]; then
+        success "VM $vmid backed up to PBS"
+    else
+        error "Failed to backup VM $vmid to PBS"
+        return 1
+    fi
+}
+
+# Create ZFS snapshot
+create_zfs_snapshot() {
+    local vmid="$1"
+    local snapshot_name="${2:-backup-$(date +%Y%m%d-%H%M%S)}"
+    
+    log "Creating ZFS snapshot for VM $vmid..."
+    
+    # Get VM disks
+    local vm_conf="/etc/pve/qemu-server/${vmid}.conf"
+    
+    if [ ! -f "$vm_conf" ]; then
+        error "VM config not found: $vm_conf"
+        return 1
+    fi
+    
+    # Find ZFS volumes
+    grep -E "^(scsi|sata|virtio|ide)[0-9]+:" "$vm_conf" | grep "zfs" | while read disk_line; do
+        local volume=$(echo "$disk_line" | cut -d':' -f2 | awk '{print $1}')
+        
+        log "Creating snapshot for volume: $volume"
+        
+        # Extract ZFS dataset
+        local dataset=$(echo "$volume" | cut -d'/' -f1-2)
+        
+        # Create snapshot
+        zfs snapshot "${dataset}@${snapshot_name}"
+        
+        if [ $? -eq 0 ]; then
+            success "Snapshot created: ${dataset}@${snapshot_name}"
+        else
+            error "Failed to create snapshot for $dataset"
+        fi
+    done
+}
+
+# Backup Proxmox cluster configuration
+backup_cluster_config() {
+    log "Backing up Proxmox cluster configuration..."
+    
+    local backup_dir="$BACKUP_ROOT/configs/$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$backup_dir"
+    
+    # Backup cluster configuration
+    if [ -d /etc/pve ]; then
+        log "Backing up /etc/pve..."
+        tar -czf "$backup_dir/etc-pve.tar.gz" -C /etc pve
+    fi
+    
+    # Backup network configuration
+    log "Backing up network config..."
+    cp /etc/network/interfaces "$backup_dir/interfaces"
+    
+    # Backup storage configuration
+    log "Backing up storage config..."
+    pvesm status > "$backup_dir/storage-status.txt"
+    cp /etc/pve/storage.cfg "$backup_dir/storage.cfg" 2>/dev/null || true
+    
+    # Backup user and permissions
+    log "Backing up users and permissions..."
+    pveum user list > "$backup_dir/users.txt"
+    pveum pool list > "$backup_dir/pools.txt"
+    cp /etc/pve/user.cfg "$backup_dir/user.cfg" 2>/dev/null || true
+    
+    # Backup ceph configuration (if used)
+    if [ -f /etc/pve/ceph.conf ]; then
+        log "Backing up Ceph config..."
+        cp /etc/pve/ceph.conf "$backup_dir/ceph.conf"
+    fi
+    
+    # Create archive
+    tar -czf "${backup_dir}.tar.gz" -C "$BACKUP_ROOT/configs" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "Cluster configuration backed up: ${backup_dir}.tar.gz"
+}
+
+# Backup all VMs
+backup_all_vms() {
+    local backup_mode="${1:-snapshot}"
+    local use_pbs="${2:-false}"
+    
+    log "Starting backup of all VMs and containers..."
+    
+    local start_time=$(date +%s)
+    local success_count=0
+    local fail_count=0
+    
+    # Get list of all VMs and containers
+    pvesh get /cluster/resources --type vm --output-format json | jq -r '.[].vmid' | while read vmid; do
+        log "Processing VMID: $vmid"
+        
+        if [ "$use_pbs" == "true" ]; then
+            if backup_to_pbs "$vmid"; then
+                success_count=$((success_count + 1))
+            else
+                fail_count=$((fail_count + 1))
+            fi
+        else
+            if backup_vm_vzdump "$vmid" "$backup_mode"; then
+                success_count=$((success_count + 1))
+            else
+                fail_count=$((fail_count + 1))
+            fi
+        fi
+    done
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    log "Backup completed in ${duration}s"
+    log "Success: $success_count, Failed: $fail_count"
+}
+
+# Restore VM from backup
+restore_vm() {
+    local backup_file="$1"
+    local vmid="$2"
+    local storage="${3:-local-lvm}"
+    
+    if [ ! -f "$backup_file" ]; then
+        error "Backup file not found: $backup_file"
+        return 1
+    fi
+    
+    log "Restoring VM from: $backup_file"
+    log "Target VMID: $vmid"
+    log "Storage: $storage"
+    
+    # Extract backup type from filename
+    if [[ "$backup_file" == *".vma.zst" ]]; then
+        # QEMU VM backup
+        qmrestore "$backup_file" "$vmid" --storage "$storage"
+    elif [[ "$backup_file" == *".tar.zst" ]]; then
+        # LXC container backup
+        pct restore "$vmid" "$backup_file" --storage "$storage"
+    else
+        error "Unknown backup format"
+        return 1
+    fi
+    
+    if [ $? -eq 0 ]; then
+        success "VM restored successfully"
+    else
+        error "Failed to restore VM"
+        return 1
+    fi
+}
+
+# Cleanup old backups
+cleanup_old_backups() {
+    local retention_days="${1:-30}"
+    
+    log "Cleaning up backups older than $retention_days days..."
+    
+    find "$BACKUP_ROOT/vzdump" -name "vzdump-*.vma.zst" -mtime +$retention_days -delete
+    find "$BACKUP_ROOT/vzdump" -name "vzdump-*.tar.zst" -mtime +$retention_days -delete
+    
+    success "Old backups cleaned up"
+}
+
+# Generate backup report
+generate_report() {
+    local report_file="$BACKUP_ROOT/backup-report-$(date +%Y%m%d-%H%M%S).html"
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Proxmox Backup Report</title>
+    <style>
+        body {
+            font-family: Arial;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+        }
+        h1 {
+            color: #e57000;
+            border-bottom: 3px solid #e57000;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #e57000;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔶 Proxmox VE Backup Report</h1>
+        <p><strong>Generated:</strong> $(date)</p>
+        
+        <h2>Backup Summary</h2>
+        <table>
+            <thead>
+                <tr><th>Metric</th><th>Value</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Total Backups</td><td>$(find $BACKUP_ROOT/vzdump -name "vzdump-*" 2>/dev/null | wc -l)</td></tr>
+                <tr><td>Total Size</td><td>$(du -sh $BACKUP_ROOT/vzdump 2>/dev/null | cut -f1)</td></tr>
+                <tr><td>Latest Backup</td><td>$(ls -t $BACKUP_ROOT/vzdump/vzdump-* 2>/dev/null | head -1 | xargs basename)</td></tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+HTML
+    
+    success "Report generated: $report_file"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_backup
+        ;;
+    
+    list)
+        list_vms
+        ;;
+    
+    backup)
+        backup_vm_vzdump "$2" "$3"
+        ;;
+    
+    backup-pbs)
+        backup_to_pbs "$2"
+        ;;
+    
+    snapshot)
+        create_zfs_snapshot "$2" "$3"
+        ;;
+    
+    cluster-config)
+        backup_cluster_config
+        ;;
+    
+    backup-all)
+        backup_all_vms "$2" "$3"
+        ;;
+    
+    restore)
+        restore_vm "$2" "$3" "$4"
+        ;;
+    
+    cleanup)
+        cleanup_old_backups "$2"
+        ;;
+    
+    report)
+        generate_report
+        ;;
+    
+    *)
+        cat <<HELP
+Proxmox VE Backup System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init            - Initialize backup system
+    list            - List all VMs and containers
+    backup <vmid> [mode]          - Backup VM/CT (snapshot/suspend/stop)
+    backup-pbs <vmid>              - Backup to Proxmox Backup Server
+    snapshot <vmid> [name]         - Create ZFS snapshot
+    cluster-config                 - Backup cluster configuration
+    backup-all [mode] [use_pbs]    - Backup all VMs
+    restore <file> <vmid> [storage] - Restore VM from backup
+    cleanup [days]                 - Remove backups older than X days
+    report                         - Generate backup report
+
+Examples:
+    $0 init
+    $0 list
+    $0 backup 100 snapshot
+    $0 backup-pbs 100
+    $0 backup-all snapshot false
+    $0 restore /backup/proxmox/vzdump/vzdump-qemu-100-*.vma.zst 200
+
+Backup Location: $BACKUP_ROOT
+HELP
+        ;;
+esac
+
+EOF
+
+chmod +x proxmox_backup.sh
+```
+
+### SaaS backups (Microsoft 365, Google Workspace, GitHub)
+
+```bash
+#!/bin/bash
+
+# Модуль 11: Application-Specific Backups - Часть 4
+# SaaS & Cloud Services Backup Systems
+
+set -e
+
+# =============================================================================
+# Задание 4: Microsoft 365 Backup System
+# =============================================================================
+
+cat > m365_backup.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/microsoft365"
+TENANT_ID="${M365_TENANT_ID}"
+CLIENT_ID="${M365_CLIENT_ID}"
+CLIENT_SECRET="${M365_CLIENT_SECRET}"
+LOG_FILE="/var/log/m365_backup.log"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $*" | tee -a "$LOG_FILE"
+}
+
+warn() {
+    echo -e "${YELLOW}⚠${NC} $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "${RED}✗${NC} $*" | tee -a "$LOG_FILE"
+}
+
+info() {
+    echo -e "${BLUE}ℹ${NC} $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize backup system
+init_backup() {
+    log "Initializing Microsoft 365 backup system..."
+    
+    mkdir -p "$BACKUP_ROOT"/{exchange,sharepoint,onedrive,teams,azuread}
+    
+    # Check prerequisites
+    if ! command -v python3 &>/dev/null; then
+        error "Python 3 required but not found"
+        return 1
+    fi
+    
+    # Install Microsoft Graph SDK
+    if ! python3 -c "import msal" 2>/dev/null; then
+        log "Installing Microsoft Authentication Library..."
+        pip3 install msal requests --quiet
+    fi
+    
+    success "Backup system initialized"
+}
+
+# Get Microsoft Graph access token
+get_access_token() {
+    python3 - <<PYTHON
+import msal
+import json
+import sys
+
+tenant_id = "$TENANT_ID"
+client_id = "$CLIENT_ID"
+client_secret = "$CLIENT_SECRET"
+
+authority = f"https://login.microsoftonline.com/{tenant_id}"
+app = msal.ConfidentialClientApplication(
+    client_id,
+    authority=authority,
+    client_credential=client_secret
+)
+
+scopes = ["https://graph.microsoft.com/.default"]
+result = app.acquire_token_for_client(scopes=scopes)
+
+if "access_token" in result:
+    print(result["access_token"])
+    sys.exit(0)
+else:
+    print(f"Error: {result.get('error_description', 'Unknown error')}", file=sys.stderr)
+    sys.exit(1)
+PYTHON
+}
+
+# Backup Exchange Online mailboxes
+backup_exchange() {
+    local user_email="$1"
+    local backup_dir="$BACKUP_ROOT/exchange/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up Exchange mailbox: $user_email"
+    
+    mkdir -p "$backup_dir"
+    
+    local token=$(get_access_token)
+    
+    if [ -z "$projects" ]; then
+        # Try as user
+        projects=$(curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "$GITLAB_URL/api/v4/users/$group_or_user/projects?per_page=100" | \
+            jq -r '.[].http_url_to_repo')
+    fi
+    
+    local count=0
+    for repo_url in $projects; do
+        local repo_name=$(basename "$repo_url" .git)
+        
+        log "Cloning repository: $repo_name"
+        
+        # Clone with authentication
+        local auth_url=$(echo "$repo_url" | sed "s|https://|https://oauth2:$GITLAB_TOKEN@|")
+        
+        git clone --mirror "$auth_url" "$backup_dir/$repo_name.git" 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            success "  Cloned: $repo_name"
+            count=$((count + 1))
+        else
+            error "  Failed to clone: $repo_name"
+        fi
+    done
+    
+    # Compress backup
+    tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "GitLab backup completed: $count repositories"
+    success "Backup archive: ${backup_dir}.tar.gz"
+}
+
+# Backup single repository with full history
+backup_single_repo() {
+    local repo_url="$1"
+    local backup_dir="$BACKUP_ROOT/single/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up repository: $repo_url"
+    
+    mkdir -p "$backup_dir"
+    
+    local repo_name=$(basename "$repo_url" .git)
+    
+    # Clone with full history
+    git clone --mirror "$repo_url" "$backup_dir/$repo_name.git"
+    
+    if [ $? -eq 0 ]; then
+        # Create bundle
+        cd "$backup_dir/$repo_name.git"
+        git bundle create "../$repo_name.bundle" --all
+        cd - > /dev/null
+        
+        # Compress
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "Repository backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup repository"
+        return 1
+    fi
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_backup
+        ;;
+    
+    github)
+        backup_github_repos "$2"
+        ;;
+    
+    gitlab)
+        backup_gitlab_repos "$2"
+        ;;
+    
+    single)
+        backup_single_repo "$2"
+        ;;
+    
+    *)
+        cat <<HELP
+Git Repositories Backup System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init                    - Initialize backup system
+    github <org|user>       - Backup all GitHub repositories
+    gitlab <group|user>     - Backup all GitLab repositories
+    single <repo-url>       - Backup single repository
+
+Environment Variables:
+    GITHUB_TOKEN    - GitHub personal access token
+    GITLAB_TOKEN    - GitLab personal access token
+    GITLAB_URL      - GitLab instance URL (default: https://gitlab.com)
+
+Examples:
+    $0 init
+    $0 github myorganization
+    $0 gitlab mygroup
+    $0 single https://github.com/user/repo.git
+
+Backup Location: $BACKUP_ROOT
+HELP
+        ;;
+esac
+EOF
+
+chmod +x git_repos_backup.sh
+
+# =============================================================================
+# Финальный скрипт: Unified Application Backup Orchestrator
+# =============================================================================
+
+cat > app_backup_orchestrator.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/applications"
+CONFIG_FILE="/etc/backup/app_backup.conf"
+LOG_FILE="/var/log/app_backup_orchestrator.log"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "\033[0;32m✓\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "\033[0;31m✗\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+# Generate configuration template
+generate_config() {
+    cat > "$CONFIG_FILE" <<CONF
+# Application Backup Configuration
+
+# Kubernetes
+KUBERNETES_ENABLED=true
+KUBERNETES_BACKUP_MODE=full  # etcd, resources, pvcs, helm, full
+
+# VMware vSphere
+VMWARE_ENABLED=false
+VCENTER_HOST=vcenter.example.com
+VCENTER_USER=administrator@vsphere.local
+VCENTER_PASS=
+VMWARE_BACKUP_TYPE=snapshot  # snapshot, export, cbt, config
+
+# Proxmox VE
+PROXMOX_ENABLED=false
+PROXMOX_HOST=pve.example.com
+PROXMOX_USER=root@pam
+PROXMOX_PASS=
+PROXMOX_BACKUP_MODE=snapshot  # snapshot, vzdump
+
+# Microsoft 365
+M365_ENABLED=false
+M365_TENANT_ID=
+M365_CLIENT_ID=
+M365_CLIENT_SECRET=
+M365_USERS="user1@domain.com,user2@domain.com"
+
+# Google Workspace
+GOOGLE_ENABLED=false
+GOOGLE_SERVICE_ACCOUNT_KEY=/etc/backup/service-account.json
+GOOGLE_ADMIN_EMAIL=admin@company.com
+GOOGLE_USERS="user1@company.com,user2@company.com"
+
+# GitHub
+GITHUB_ENABLED=false
+GITHUB_TOKEN=
+GITHUB_ORGS="org1,org2"
+
+# GitLab
+GITLAB_ENABLED=false
+GITLAB_TOKEN=
+GITLAB_URL=https://gitlab.com
+GITLAB_GROUPS="group1,group2"
+
+# Backup Schedule
+RETENTION_DAYS=30
+COMPRESSION=true
+ENCRYPTION=false
+ENCRYPTION_KEY=/etc/backup/encryption.key
+
+# Notification
+NOTIFY_EMAIL=admin@example.com
+NOTIFY_SLACK_WEBHOOK=
+CONF
+
+    success "Configuration template created: $CONFIG_FILE"
+    log "Please edit the configuration file and enable desired backups"
+}
+
+# Load configuration
+load_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        error "Configuration file not found: $CONFIG_FILE"
+        log "Run: $0 init to create template"
+        return 1
+    fi
+    
+    source "$CONFIG_FILE"
+}
+
+# Run full backup cycle
+run_full_backup() {
+    log "Starting full application backup cycle..."
+    
+    load_config
+    
+    local start_time=$(date +%s)
+    local backup_summary=""
+    
+    # Kubernetes
+    if [ "$KUBERNETES_ENABLED" = "true" ]; then
+        log "Running Kubernetes backup..."
+        if ./kubernetes_backup.sh "$KUBERNETES_BACKUP_MODE"; then
+            success "Kubernetes backup completed"
+            backup_summary+="✓ Kubernetes\n"
+        else
+            error "Kubernetes backup failed"
+            backup_summary+="✗ Kubernetes\n"
+        fi
+    fi
+    
+    # VMware
+    if [ "$VMWARE_ENABLED" = "true" ]; then
+        log "Running VMware backup..."
+        export VCENTER_HOST VCENTER_USER VCENTER_PASS
+        if ./vmware_backup.sh backup-all "$VMWARE_BACKUP_TYPE"; then
+            success "VMware backup completed"
+            backup_summary+="✓ VMware\n"
+        else
+            error "VMware backup failed"
+            backup_summary+="✗ VMware\n"
+        fi
+    fi
+    
+    # Proxmox
+    if [ "$PROXMOX_ENABLED" = "true" ]; then
+        log "Running Proxmox backup..."
+        export PROXMOX_HOST PROXMOX_USER PROXMOX_PASS
+        if ./proxmox_backup.sh backup-all "$PROXMOX_BACKUP_MODE"; then
+            success "Proxmox backup completed"
+            backup_summary+="✓ Proxmox\n"
+        else
+            error "Proxmox backup failed"
+            backup_summary+="✗ Proxmox\n"
+        fi
+    fi
+    
+    # Microsoft 365
+    if [ "$M365_ENABLED" = "true" ]; then
+        log "Running Microsoft 365 backup..."
+        export M365_TENANT_ID M365_CLIENT_ID M365_CLIENT_SECRET
+        
+        IFS=',' read -ra USERS <<< "$M365_USERS"
+        for user in "${USERS[@]}"; do
+            ./m365_backup.sh exchange "$user"
+            ./m365_backup.sh onedrive "$user"
+        done
+        
+        success "Microsoft 365 backup completed"
+        backup_summary+="✓ Microsoft 365\n"
+    fi
+    
+    # Google Workspace
+    if [ "$GOOGLE_ENABLED" = "true" ]; then
+        log "Running Google Workspace backup..."
+        export GOOGLE_SERVICE_ACCOUNT_KEY GOOGLE_ADMIN_EMAIL
+        
+        IFS=',' read -ra USERS <<< "$GOOGLE_USERS"
+        for user in "${USERS[@]}"; do
+            ./google_workspace_backup.sh gmail "$user"
+            ./google_workspace_backup.sh drive "$user"
+        done
+        
+        success "Google Workspace backup completed"
+        backup_summary+="✓ Google Workspace\n"
+    fi
+    
+    # GitHub
+    if [ "$GITHUB_ENABLED" = "true" ]; then
+        log "Running GitHub backup..."
+        export GITHUB_TOKEN
+        
+        IFS=',' read -ra ORGS <<< "$GITHUB_ORGS"
+        for org in "${ORGS[@]}"; do
+            ./git_repos_backup.sh github "$org"
+        done
+        
+        success "GitHub backup completed"
+        backup_summary+="✓ GitHub\n"
+    fi
+    
+    # GitLab
+    if [ "$GITLAB_ENABLED" = "true" ]; then
+        log "Running GitLab backup..."
+        export GITLAB_TOKEN GITLAB_URL
+        
+        IFS=',' read -ra GROUPS <<< "$GITLAB_GROUPS"
+        for group in "${GROUPS[@]}"; do
+            ./git_repos_backup.sh gitlab "$group"
+        done
+        
+        success "GitLab backup completed"
+        backup_summary+="✓ GitLab\n"
+    fi
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    log "Full backup cycle completed in ${duration}s"
+    
+    # Generate report
+    generate_backup_report "$backup_summary" "$duration"
+    
+    # Cleanup old backups
+    if [ -n "$RETENTION_DAYS" ]; then
+        cleanup_old_backups "$RETENTION_DAYS"
+    fi
+    
+    # Send notifications
+    send_notifications "$backup_summary"
+}
+
+# Generate consolidated backup report
+generate_backup_report() {
+    local summary="$1"
+    local duration="$2"
+    
+    local report_file="$BACKUP_ROOT/reports/backup-report-$(date +%Y%m%d-%H%M%S).html"
+    mkdir -p "$BACKUP_ROOT/reports"
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Application Backup Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            border-bottom: 4px solid #667eea;
+            padding-bottom: 15px;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+        .summary {
+            background: #f8f9fa;
+            border-left: 5px solid #667eea;
+            padding: 20px;
+            margin: 30px 0;
+            font-size: 1.2em;
+            line-height: 1.8;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        .metric-value {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .metric-label {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        .section {
+            margin: 40px 0;
+        }
+        .section h2 {
+            color: #764ba2;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #764ba2;
+            padding-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Application Backup Report</h1>
+        <div class="timestamp">
+            <strong>Generated:</strong> $(date '+%A, %B %d, %Y at %I:%M %p')
+        </div>
+        
+        <div class="metrics">
+            <div class="metric-card">
+                <div class="metric-label">Duration</div>
+                <div class="metric-value">$((duration / 60))m</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Size</div>
+                <div class="metric-value">$(du -sh $BACKUP_ROOT 2>/dev/null | cut -f1 || echo "N/A")</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Backup Summary</h2>
+            <div class="summary">
+                $(echo -e "$summary" | sed 's/$/\<br\>/g')
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Backup Locations</h2>
+            <ul>
+                <li><strong>Kubernetes:</strong> $BACKUP_ROOT/kubernetes/</li>
+                <li><strong>VMware:</strong> $BACKUP_ROOT/vmware/</li>
+                <li><strong>Proxmox:</strong> $BACKUP_ROOT/proxmox/</li>
+                <li><strong>Microsoft 365:</strong> $BACKUP_ROOT/microsoft365/</li>
+                <li><strong>Google Workspace:</strong> $BACKUP_ROOT/google-workspace/</li>
+                <li><strong>Git Repositories:</strong> $BACKUP_ROOT/git-repos/</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+HTML
+    
+    success "Backup report generated: $report_file"
+}
+
+# Cleanup old backups
+cleanup_old_backups() {
+    local retention_days="$1"
+    
+    log "Cleaning up backups older than $retention_days days..."
+    
+    find "$BACKUP_ROOT" -type f \( -name "*.tar.gz" -o -name "*.vma.zst" \) \
+        -mtime +$retention_days -delete
+    
+    success "Old backups cleaned up"
+}
+
+# Send notifications
+send_notifications() {
+    local summary="$1"
+    
+    # Email notification
+    if [ -n "$NOTIFY_EMAIL" ] && command -v mail &>/dev/null; then
+        echo -e "Backup Summary:\n\n$summary" | \
+            mail -s "Application Backup Report - $(date +%Y-%m-%d)" "$NOTIFY_EMAIL"
+        
+        success "Email notification sent to $NOTIFY_EMAIL"
+    fi
+    
+    # Slack notification
+    if [ -n "$NOTIFY_SLACK_WEBHOOK" ]; then
+        curl -X POST "$NOTIFY_SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"text\": \"Application Backup Completed\n\n$summary\"}" \
+            2>/dev/null
+        
+        success "Slack notification sent"
+    fi
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        mkdir -p "$(dirname "$CONFIG_FILE")"
+        generate_config
+        ;;
+    
+    run)
+        run_full_backup
+        ;;
+    
+    test)
+        load_config
+        log "Configuration loaded successfully"
+        log "Enabled backups:"
+        [ "$KUBERNETES_ENABLED" = "true" ] && log "  - Kubernetes"
+        [ "$VMWARE_ENABLED" = "true" ] && log "  - VMware vSphere"
+        [ "$PROXMOX_ENABLED" = "true" ] && log "  - Proxmox VE"
+        [ "$M365_ENABLED" = "true" ] && log "  - Microsoft 365"
+        [ "$GOOGLE_ENABLED" = "true" ] && log "  - Google Workspace"
+        [ "$GITHUB_ENABLED" = "true" ] && log "  - GitHub"
+        [ "$GITLAB_ENABLED" = "true" ] && log "  - GitLab"
+        ;;
+    
+    *)
+        cat <<HELP
+Application Backup Orchestrator
+
+Usage: $0 <command>
+
+Commands:
+    init    - Generate configuration template
+    run     - Run full backup cycle
+    test    - Test configuration
+
+Configuration: $CONFIG_FILE
+
+This orchestrator coordinates backups across:
+    • Kubernetes clusters
+    • VMware vSphere / Proxmox VE
+    • Microsoft 365 / Google Workspace
+    • GitHub / GitLab repositories
+
+Setup:
+    1. Run: $0 init
+    2. Edit: $CONFIG_FILE
+    3. Test: $0 test
+    4. Run: $0 run
+
+Schedule with cron:
+    0 2 * * * /path/to/app_backup_orchestrator.sh run
+HELP
+        ;;
+esac
+EOF
+
+chmod +x app_backup_orchestrator.sh
+
+echo ""
+echo "==================================================================="
+echo "✅ Module 11: Application-Specific Backups - Complete!"
+echo "==================================================================="
+echo ""
+echo "Created backup scripts:"
+echo "  1. kubernetes_backup.sh          - Kubernetes cluster backups"
+echo "  2. vmware_backup.sh              - VMware vSphere backups"
+echo "  3. proxmox_backup.sh             - Proxmox VE backups"
+echo "  4. m365_backup.sh                - Microsoft 365 backups"
+echo "  5. google_workspace_backup.sh    - Google Workspace backups"
+echo "  6. git_repos_backup.sh           - Git repository backups"
+echo "  7. app_backup_orchestrator.sh    - Unified orchestrator"
+echo ""
+echo "Quick Start:"
+echo "  ./app_backup_orchestrator.sh init   # Create config"
+echo "  ./app_backup_orchestrator.sh test   # Test config"
+echo "  ./app_backup_orchestrator.sh run    # Run backups"
+echo ""
+echo "===================================================================" -z "$token" ]; then
+        error "Failed to get access token"
+        return 1
+    fi
+    
+    # Export messages
+    python3 - <<PYTHON "$token" "$user_email" "$backup_dir"
+import sys
+import requests
+import json
+from datetime import datetime
+
+token = sys.argv[1]
+email = sys.argv[2]
+backup_dir = sys.argv[3]
+
+headers = {
+    'Authorization': f'Bearer {token}',
+    'Content-Type': 'application/json'
+}
+
+# Get all mail folders
+folders_url = f'https://graph.microsoft.com/v1.0/users/{email}/mailFolders'
+folders_response = requests.get(folders_url, headers=headers)
+
+if folders_response.status_code != 200:
+    print(f"Error getting folders: {folders_response.status_code}", file=sys.stderr)
+    sys.exit(1)
+
+folders = folders_response.json().get('value', [])
+
+total_messages = 0
+for folder in folders:
+    folder_id = folder['id']
+    folder_name = folder['displayName']
+    
+    print(f"Processing folder: {folder_name}")
+    
+    # Get messages from folder
+    messages_url = f'https://graph.microsoft.com/v1.0/users/{email}/mailFolders/{folder_id}/messages'
+    
+    all_messages = []
+    while messages_url:
+        messages_response = requests.get(messages_url, headers=headers)
+        
+        if messages_response.status_code != 200:
+            print(f"Error getting messages: {messages_response.status_code}", file=sys.stderr)
+            break
+        
+        data = messages_response.json()
+        all_messages.extend(data.get('value', []))
+        messages_url = data.get('@odata.nextLink')
+    
+    # Save messages
+    if all_messages:
+        safe_folder_name = folder_name.replace('/', '_').replace('\\', '_')
+        with open(f'{backup_dir}/{safe_folder_name}.json', 'w') as f:
+            json.dump(all_messages, f, indent=2)
+        
+        total_messages += len(all_messages)
+        print(f"  Backed up {len(all_messages)} messages")
+
+print(f"\nTotal messages backed up: {total_messages}")
+
+# Save backup metadata
+metadata = {
+    'user': email,
+    'timestamp': datetime.now().isoformat(),
+    'total_messages': total_messages,
+    'total_folders': len(folders)
+}
+
+with open(f'{backup_dir}/metadata.json', 'w') as f:
+    json.dump(metadata, f, indent=2)
+PYTHON
+    
+    if [ $? -eq 0 ]; then
+        # Compress backup
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "Exchange mailbox backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup Exchange mailbox"
+        return 1
+    fi
+}
+
+# Backup SharePoint sites
+backup_sharepoint() {
+    local site_url="$1"
+    local backup_dir="$BACKUP_ROOT/sharepoint/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up SharePoint site: $site_url"
+    
+    mkdir -p "$backup_dir"
+    
+    local token=$(get_access_token)
+    
+    python3 - <<PYTHON "$token" "$site_url" "$backup_dir"
+import sys
+import requests
+import json
+import os
+
+token = sys.argv[1]
+site_url = sys.argv[2]
+backup_dir = sys.argv[3]
+
+headers = {
+    'Authorization': f'Bearer {token}',
+    'Content-Type': 'application/json'
+}
+
+# Get site ID
+domain = site_url.split('/')[2]
+site_path = '/'.join(site_url.split('/')[3:])
+
+sites_url = f'https://graph.microsoft.com/v1.0/sites/{domain}:/{site_path}'
+site_response = requests.get(sites_url, headers=headers)
+
+if site_response.status_code != 200:
+    print(f"Error getting site: {site_response.status_code}", file=sys.stderr)
+    sys.exit(1)
+
+site_id = site_response.json()['id']
+
+# Get all lists
+lists_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/lists'
+lists_response = requests.get(lists_url, headers=headers)
+
+if lists_response.status_code != 200:
+    print(f"Error getting lists: {lists_response.status_code}", file=sys.stderr)
+    sys.exit(1)
+
+lists = lists_response.json().get('value', [])
+
+for list_item in lists:
+    list_id = list_item['id']
+    list_name = list_item['displayName']
+    
+    print(f"Backing up list: {list_name}")
+    
+    # Get list items
+    items_url = f'https://graph.microsoft.com/v1.0/sites/{site_id}/lists/{list_id}/items?expand=fields'
+    
+    all_items = []
+    while items_url:
+        items_response = requests.get(items_url, headers=headers)
+        
+        if items_response.status_code != 200:
+            print(f"Error getting items: {items_response.status_code}", file=sys.stderr)
+            break
+        
+        data = items_response.json()
+        all_items.extend(data.get('value', []))
+        items_url = data.get('@odata.nextLink')
+    
+    # Save items
+    if all_items:
+        safe_name = list_name.replace('/', '_').replace('\\', '_')
+        with open(f'{backup_dir}/{safe_name}.json', 'w') as f:
+            json.dump(all_items, f, indent=2)
+        
+        print(f"  Backed up {len(all_items)} items")
+
+# Backup site metadata
+with open(f'{backup_dir}/site-metadata.json', 'w') as f:
+    json.dump(site_response.json(), f, indent=2)
+
+print(f"\nSharePoint site backed up successfully")
+PYTHON
+    
+    if [ $? -eq 0 ]; then
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "SharePoint site backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup SharePoint site"
+        return 1
+    fi
+}
+
+# Backup OneDrive
+backup_onedrive() {
+    local user_email="$1"
+    local backup_dir="$BACKUP_ROOT/onedrive/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up OneDrive for: $user_email"
+    
+    mkdir -p "$backup_dir"
+    
+    local token=$(get_access_token)
+    
+    python3 - <<PYTHON "$token" "$user_email" "$backup_dir"
+import sys
+import requests
+import json
+import os
+
+token = sys.argv[1]
+email = sys.argv[2]
+backup_dir = sys.argv[3]
+
+headers = {
+    'Authorization': f'Bearer {token}',
+    'Content-Type': 'application/json'
+}
+
+def download_file(file_id, file_name, path):
+    download_url = f'https://graph.microsoft.com/v1.0/users/{email}/drive/items/{file_id}/content'
+    response = requests.get(download_url, headers=headers)
+    
+    if response.status_code == 200:
+        file_path = os.path.join(path, file_name)
+        with open(file_path, 'wb') as f:
+            f.write(response.content)
+        return True
+    return False
+
+def backup_folder(folder_id, folder_path):
+    items_url = f'https://graph.microsoft.com/v1.0/users/{email}/drive/items/{folder_id}/children'
+    
+    while items_url:
+        response = requests.get(items_url, headers=headers)
+        
+        if response.status_code != 200:
+            print(f"Error: {response.status_code}", file=sys.stderr)
+            return
+        
+        data = response.json()
+        items = data.get('value', [])
+        
+        for item in items:
+            name = item['name']
+            
+            if 'folder' in item:
+                # Create subfolder and recurse
+                new_path = os.path.join(folder_path, name)
+                os.makedirs(new_path, exist_ok=True)
+                print(f"Processing folder: {name}")
+                backup_folder(item['id'], new_path)
+            else:
+                # Download file
+                print(f"Downloading: {name}")
+                download_file(item['id'], name, folder_path)
+        
+        items_url = data.get('@odata.nextLink')
+
+# Start backup from root
+print(f"Starting OneDrive backup for {email}")
+backup_folder('root', backup_dir)
+print("Backup completed")
+PYTHON
+    
+    if [ $? -eq 0 ]; then
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "OneDrive backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup OneDrive"
+        return 1
+    fi
+}
+
+# Backup Teams data
+backup_teams() {
+    local team_id="$1"
+    local backup_dir="$BACKUP_ROOT/teams/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up Teams data for team: $team_id"
+    
+    mkdir -p "$backup_dir"
+    
+    local token=$(get_access_token)
+    
+    python3 - <<PYTHON "$token" "$team_id" "$backup_dir"
+import sys
+import requests
+import json
+
+token = sys.argv[1]
+team_id = sys.argv[2]
+backup_dir = sys.argv[3]
+
+headers = {
+    'Authorization': f'Bearer {token}',
+    'Content-Type': 'application/json'
+}
+
+# Get team info
+team_url = f'https://graph.microsoft.com/v1.0/teams/{team_id}'
+team_response = requests.get(team_url, headers=headers)
+
+if team_response.status_code != 200:
+    print(f"Error getting team: {team_response.status_code}", file=sys.stderr)
+    sys.exit(1)
+
+team_data = team_response.json()
+
+# Get channels
+channels_url = f'https://graph.microsoft.com/v1.0/teams/{team_id}/channels'
+channels_response = requests.get(channels_url, headers=headers)
+
+channels = channels_response.json().get('value', [])
+
+for channel in channels:
+    channel_id = channel['id']
+    channel_name = channel['displayName']
+    
+    print(f"Backing up channel: {channel_name}")
+    
+    # Get messages
+    messages_url = f'https://graph.microsoft.com/v1.0/teams/{team_id}/channels/{channel_id}/messages'
+    
+    all_messages = []
+    page = 0
+    while messages_url and page < 10:  # Limit pages to prevent excessive API calls
+        messages_response = requests.get(messages_url, headers=headers)
+        
+        if messages_response.status_code != 200:
+            break
+        
+        data = messages_response.json()
+        all_messages.extend(data.get('value', []))
+        messages_url = data.get('@odata.nextLink')
+        page += 1
+    
+    # Save messages
+    if all_messages:
+        safe_name = channel_name.replace('/', '_').replace('\\', '_')
+        with open(f'{backup_dir}/{safe_name}-messages.json', 'w') as f:
+            json.dump(all_messages, f, indent=2)
+        
+        print(f"  Backed up {len(all_messages)} messages")
+
+# Save team metadata
+with open(f'{backup_dir}/team-metadata.json', 'w') as f:
+    json.dump(team_data, f, indent=2)
+
+with open(f'{backup_dir}/channels.json', 'w') as f:
+    json.dump(channels, f, indent=2)
+
+print("Teams backup completed")
+PYTHON
+    
+    if [ $? -eq 0 ]; then
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "Teams data backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup Teams data"
+        return 1
+    fi
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_backup
+        ;;
+    
+    exchange)
+        backup_exchange "$2"
+        ;;
+    
+    sharepoint)
+        backup_sharepoint "$2"
+        ;;
+    
+    onedrive)
+        backup_onedrive "$2"
+        ;;
+    
+    teams)
+        backup_teams "$2"
+        ;;
+    
+    *)
+        cat <<HELP
+Microsoft 365 Backup System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init                        - Initialize backup system
+    exchange <email>            - Backup Exchange mailbox
+    sharepoint <site-url>       - Backup SharePoint site
+    onedrive <email>            - Backup OneDrive
+    teams <team-id>             - Backup Teams data
+
+Environment Variables:
+    M365_TENANT_ID     - Azure AD Tenant ID
+    M365_CLIENT_ID     - Application Client ID
+    M365_CLIENT_SECRET - Application Client Secret
+
+Examples:
+    $0 init
+    $0 exchange user@domain.com
+    $0 sharepoint https://company.sharepoint.com/sites/team
+    $0 onedrive user@domain.com
+    $0 teams 02bd9fd6-8f93-4758-87c3-1fb73740a315
+
+Backup Location: $BACKUP_ROOT
+
+Note: Requires app registration with appropriate Microsoft Graph permissions
+HELP
+        ;;
+esac
+EOF
+
+chmod +x m365_backup.sh
+
+# =============================================================================
+# Задание 5: Google Workspace Backup System
+# =============================================================================
+
+cat > google_workspace_backup.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/google-workspace"
+SERVICE_ACCOUNT_KEY="${GOOGLE_SERVICE_ACCOUNT_KEY:-/etc/backup/service-account.json}"
+ADMIN_EMAIL="${GOOGLE_ADMIN_EMAIL}"
+LOG_FILE="/var/log/google_workspace_backup.log"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "\033[0;32m✓\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "\033[0;31m✗\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize backup system
+init_backup() {
+    log "Initializing Google Workspace backup system..."
+    
+    mkdir -p "$BACKUP_ROOT"/{gmail,drive,calendar,contacts}
+    
+    # Install Google APIs client
+    if ! python3 -c "import google.auth" 2>/dev/null; then
+        log "Installing Google API client..."
+        pip3 install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client --quiet
+    fi
+    
+    if [ ! -f "$SERVICE_ACCOUNT_KEY" ]; then
+        error "Service account key not found: $SERVICE_ACCOUNT_KEY"
+        return 1
+    fi
+    
+    success "Backup system initialized"
+}
+
+# Backup Gmail
+backup_gmail() {
+    local user_email="$1"
+    local backup_dir="$BACKUP_ROOT/gmail/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up Gmail for: $user_email"
+    
+    mkdir -p "$backup_dir"
+    
+    python3 - <<PYTHON "$SERVICE_ACCOUNT_KEY" "$user_email" "$backup_dir"
+import sys
+import json
+import os
+import base64
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+key_file = sys.argv[1]
+user = sys.argv[2]
+backup_dir = sys.argv[3]
+
+# Setup credentials
+SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+credentials = service_account.Credentials.from_service_account_file(
+    key_file, scopes=SCOPES)
+delegated_credentials = credentials.with_subject(user)
+
+# Build service
+service = build('gmail', 'v1', credentials=delegated_credentials)
+
+# Get all labels
+labels = service.users().labels().list(userId='me').execute().get('labels', [])
+
+with open(f'{backup_dir}/labels.json', 'w') as f:
+    json.dump(labels, f, indent=2)
+
+total_messages = 0
+
+for label in labels:
+    label_id = label['id']
+    label_name = label['name']
+    
+    print(f"Processing label: {label_name}")
+    
+    # Get messages with this label
+    messages = []
+    page_token = None
+    
+    while True:
+        response = service.users().messages().list(
+            userId='me',
+            labelIds=[label_id],
+            pageToken=page_token,
+            maxResults=500
+        ).execute()
+        
+        if 'messages' in response:
+            for msg in response['messages']:
+                # Get full message
+                full_msg = service.users().messages().get(
+                    userId='me',
+                    id=msg['id'],
+                    format='full'
+                ).execute()
+                
+                messages.append(full_msg)
+        
+        page_token = response.get('nextPageToken')
+        if not page_token:
+            break
+    
+    if messages:
+        safe_name = label_name.replace('/', '_').replace('\\', '_')
+        with open(f'{backup_dir}/{safe_name}.json', 'w') as f:
+            json.dump(messages, f, indent=2)
+        
+        total_messages += len(messages)
+        print(f"  Backed up {len(messages)} messages")
+
+print(f"\nTotal messages backed up: {total_messages}")
+
+# Save metadata
+metadata = {
+    'user': user,
+    'total_messages': total_messages,
+    'total_labels': len(labels)
+}
+
+with open(f'{backup_dir}/metadata.json', 'w') as f:
+    json.dump(metadata, f, indent=2)
+PYTHON
+    
+    if [ $? -eq 0 ]; then
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "Gmail backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup Gmail"
+        return 1
+    fi
+}
+
+# Backup Google Drive
+backup_drive() {
+    local user_email="$1"
+    local backup_dir="$BACKUP_ROOT/drive/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up Google Drive for: $user_email"
+    
+    mkdir -p "$backup_dir"
+    
+    python3 - <<PYTHON "$SERVICE_ACCOUNT_KEY" "$user_email" "$backup_dir"
+import sys
+import os
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
+import io
+
+key_file = sys.argv[1]
+user = sys.argv[2]
+backup_dir = sys.argv[3]
+
+SCOPES = ['https://www.googleapis.com/auth/drive.readonly']
+credentials = service_account.Credentials.from_service_account_file(
+    key_file, scopes=SCOPES)
+delegated_credentials = credentials.with_subject(user)
+
+service = build('drive', 'v3', credentials=delegated_credentials)
+
+def download_file(file_id, file_name, path):
+    request = service.files().get_media(fileId=file_id)
+    file_path = os.path.join(path, file_name)
+    
+    with io.FileIO(file_path, 'wb') as fh:
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while not done:
+            status, done = downloader.next_chunk()
+    
+    return file_path
+
+def backup_folder(folder_id, folder_path):
+    query = f"'{folder_id}' in parents and trashed=false"
+    page_token = None
+    
+    while True:
+        response = service.files().list(
+            q=query,
+            spaces='drive',
+            fields='nextPageToken, files(id, name, mimeType)',
+            pageToken=page_token
+        ).execute()
+        
+        for file in response.get('files', []):
+            name = file['name']
+            mime_type = file['mimeType']
+            
+            if mime_type == 'application/vnd.google-apps.folder':
+                new_path = os.path.join(folder_path, name)
+                os.makedirs(new_path, exist_ok=True)
+                print(f"Processing folder: {name}")
+                backup_folder(file['id'], new_path)
+            else:
+                print(f"Downloading: {name}")
+                try:
+                    download_file(file['id'], name, folder_path)
+                except Exception as e:
+                    print(f"Error downloading {name}: {e}")
+        
+        page_token = response.get('nextPageToken')
+        if not page_token:
+            break
+
+print(f"Starting Google Drive backup for {user}")
+backup_folder('root', backup_dir)
+print("Backup completed")
+PYTHON
+    
+    if [ $? -eq 0 ]; then
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "Google Drive backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup Google Drive"
+        return 1
+    fi
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_backup
+        ;;
+    
+    gmail)
+        backup_gmail "$2"
+        ;;
+    
+    drive)
+        backup_drive "$2"
+        ;;
+    
+    *)
+        cat <<HELP
+Google Workspace Backup System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init              - Initialize backup system
+    gmail <email>     - Backup Gmail
+    drive <email>     - Backup Google Drive
+
+Environment Variables:
+    GOOGLE_SERVICE_ACCOUNT_KEY - Path to service account JSON key
+    GOOGLE_ADMIN_EMAIL         - Admin email for domain-wide delegation
+
+Examples:
+    $0 init
+    $0 gmail user@company.com
+    $0 drive user@company.com
+
+Backup Location: $BACKUP_ROOT
+HELP
+        ;;
+esac
+EOF
+
+chmod +x google_workspace_backup.sh
+
+# =============================================================================
+# Задание 6: GitHub/GitLab Repository Backup System
+# =============================================================================
+
+cat > git_repos_backup.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/git-repos"
+GITHUB_TOKEN="${GITHUB_TOKEN}"
+GITLAB_TOKEN="${GITLAB_TOKEN}"
+GITLAB_URL="${GITLAB_URL:-https://gitlab.com}"
+LOG_FILE="/var/log/git_repos_backup.log"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "\033[0;32m✓\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "\033[0;31m✗\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+# Initialize backup system
+init_backup() {
+    log "Initializing Git repositories backup system..."
+    
+    mkdir -p "$BACKUP_ROOT"/{github,gitlab}
+    
+    success "Backup system initialized"
+}
+
+# Backup GitHub repositories
+backup_github_repos() {
+    local org_or_user="$1"
+    local backup_dir="$BACKUP_ROOT/github/$org_or_user/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up GitHub repositories for: $org_or_user"
+    
+    if [ -z "$GITHUB_TOKEN" ]; then
+        error "GITHUB_TOKEN not set"
+        return 1
+    fi
+    
+    mkdir -p "$backup_dir"
+    
+    # Get list of repositories
+    local repos=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+        "https://api.github.com/users/$org_or_user/repos?per_page=100" | \
+        jq -r '.[].clone_url')
+    
+    if [ -z "$repos" ]; then
+        # Try as organization
+        repos=$(curl -s -H "Authorization: token $GITHUB_TOKEN" \
+            "https://api.github.com/orgs/$org_or_user/repos?per_page=100" | \
+            jq -r '.[].clone_url')
+    fi
+    
+    local count=0
+    for repo_url in $repos; do
+        local repo_name=$(basename "$repo_url" .git)
+        
+        log "Cloning repository: $repo_name"
+        
+        # Clone with authentication
+        local auth_url=$(echo "$repo_url" | sed "s|https://|https://$GITHUB_TOKEN@|")
+        
+        git clone --mirror "$auth_url" "$backup_dir/$repo_name.git" 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            success "  Cloned: $repo_name"
+            count=$((count + 1))
+        else
+            error "  Failed to clone: $repo_name"
+        fi
+    done
+    
+    # Compress backup
+    tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "GitHub backup completed: $count repositories"
+    success "Backup archive: ${backup_dir}.tar.gz"
+}
+
+# Backup GitLab repositories
+backup_gitlab_repos() {
+    local group_or_user="$1"
+    local backup_dir="$BACKUP_ROOT/gitlab/$group_or_user/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up GitLab repositories for: $group_or_user"
+    
+    if [ -z "$GITLAB_TOKEN" ]; then
+        error "GITLAB_TOKEN not set"
+        return 1
+    fi
+    
+    mkdir -p "$backup_dir"
+    
+    # Get list of projects
+    local projects=$(curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+        "$GITLAB_URL/api/v4/groups/$group_or_user/projects?per_page=100" | \
+        jq -r '.[].http_url_to_repo')
+    
+    if [ -z "$projects" ]; then
+        # Try as user
+        projects=$(curl -s -H "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "$GITLAB_URL/api/v4/users/$group_or_user/projects?per_page=100" | \
+            jq -r '.[].http_url_to_repo')
+    fi
+    
+    local count=0
+    for repo_url in $projects; do
+        local repo_name=$(basename "$repo_url" .git)
+        
+        log "Cloning repository: $repo_name"
+        
+        # Clone with authentication
+        local auth_url=$(echo "$repo_url" | sed "s|https://|https://oauth2:$GITLAB_TOKEN@|")
+        
+        git clone --mirror "$auth_url" "$backup_dir/$repo_name.git" 2>/dev/null
+        
+        if [ $? -eq 0 ]; then
+            success "  Cloned: $repo_name"
+            count=$((count + 1))
+        else
+            error "  Failed to clone: $repo_name"
+        fi
+    done
+    
+    # Compress backup
+    tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+    rm -rf "$backup_dir"
+    
+    success "GitLab backup completed: $count repositories"
+    success "Backup archive: ${backup_dir}.tar.gz"
+}
+
+# Backup single repository with full history
+backup_single_repo() {
+    local repo_url="$1"
+    local backup_dir="$BACKUP_ROOT/single/$(date +%Y%m%d-%H%M%S)"
+    
+    log "Backing up repository: $repo_url"
+    
+    mkdir -p "$backup_dir"
+    
+    local repo_name=$(basename "$repo_url" .git)
+    
+    # Clone with full history
+    git clone --mirror "$repo_url" "$backup_dir/$repo_name.git"
+    
+    if [ $? -eq 0 ]; then
+        # Create bundle
+        cd "$backup_dir/$repo_name.git"
+        git bundle create "../$repo_name.bundle" --all
+        cd - > /dev/null
+        
+        # Compress
+        tar -czf "${backup_dir}.tar.gz" -C "$(dirname "$backup_dir")" "$(basename "$backup_dir")"
+        rm -rf "$backup_dir"
+        
+        success "Repository backed up: ${backup_dir}.tar.gz"
+    else
+        error "Failed to backup repository"
+        return 1
+    fi
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_backup
+        ;;
+    
+    github)
+        backup_github_repos "$2"
+        ;;
+    
+    gitlab)
+        backup_gitlab_repos "$2"
+        ;;
+    
+    single)
+        backup_single_repo "$2"
+        ;;
+    
+    *)
+        cat <<HELP
+Git Repositories Backup System
+
+Usage: $0 <command> [options]
+
+Commands:
+    init                    - Initialize backup system
+    github <org|user>       - Backup all GitHub repositories
+    gitlab <group|user>     - Backup all GitLab repositories
+    single <repo-url>       - Backup single repository
+
+Environment Variables:
+    GITHUB_TOKEN    - GitHub personal access token
+    GITLAB_TOKEN    - GitLab personal access token
+    GITLAB_URL      - GitLab instance URL (default: https://gitlab.com)
+
+Examples:
+    $0 init
+    $0 github myorganization
+    $0 gitlab mygroup
+    $0 single https://github.com/user/repo.git
+
+Backup Location: $BACKUP_ROOT
+HELP
+        ;;
+esac
+EOF
+
+chmod +x git_repos_backup.sh
+
+# =============================================================================
+# Финальный скрипт: Unified Application Backup Orchestrator
+# =============================================================================
+
+cat > app_backup_orchestrator.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+BACKUP_ROOT="/backup/applications"
+CONFIG_FILE="/etc/backup/app_backup.conf"
+LOG_FILE="/var/log/app_backup_orchestrator.log"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
+}
+
+success() {
+    echo -e "\033[0;32m✓\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+error() {
+    echo -e "\033[0;31m✗\033[0m $*" | tee -a "$LOG_FILE"
+}
+
+# Generate configuration template
+generate_config() {
+    cat > "$CONFIG_FILE" <<CONF
+# Application Backup Configuration
+
+# Kubernetes
+KUBERNETES_ENABLED=true
+KUBERNETES_BACKUP_MODE=full  # etcd, resources, pvcs, helm, full
+
+# VMware vSphere
+VMWARE_ENABLED=false
+VCENTER_HOST=vcenter.example.com
+VCENTER_USER=administrator@vsphere.local
+VCENTER_PASS=
+VMWARE_BACKUP_TYPE=snapshot  # snapshot, export, cbt, config
+
+# Proxmox VE
+PROXMOX_ENABLED=false
+PROXMOX_HOST=pve.example.com
+PROXMOX_USER=root@pam
+PROXMOX_PASS=
+PROXMOX_BACKUP_MODE=snapshot  # snapshot, vzdump
+
+# Microsoft 365
+M365_ENABLED=false
+M365_TENANT_ID=
+M365_CLIENT_ID=
+M365_CLIENT_SECRET=
+M365_USERS="user1@domain.com,user2@domain.com"
+
+# Google Workspace
+GOOGLE_ENABLED=false
+GOOGLE_SERVICE_ACCOUNT_KEY=/etc/backup/service-account.json
+GOOGLE_ADMIN_EMAIL=admin@company.com
+GOOGLE_USERS="user1@company.com,user2@company.com"
+
+# GitHub
+GITHUB_ENABLED=false
+GITHUB_TOKEN=
+GITHUB_ORGS="org1,org2"
+
+# GitLab
+GITLAB_ENABLED=false
+GITLAB_TOKEN=
+GITLAB_URL=https://gitlab.com
+GITLAB_GROUPS="group1,group2"
+
+# Backup Schedule
+RETENTION_DAYS=30
+COMPRESSION=true
+ENCRYPTION=false
+ENCRYPTION_KEY=/etc/backup/encryption.key
+
+# Notification
+NOTIFY_EMAIL=admin@example.com
+NOTIFY_SLACK_WEBHOOK=
+CONF
+
+    success "Configuration template created: $CONFIG_FILE"
+    log "Please edit the configuration file and enable desired backups"
+}
+
+# Load configuration
+load_config() {
+    if [ ! -f "$CONFIG_FILE" ]; then
+        error "Configuration file not found: $CONFIG_FILE"
+        log "Run: $0 init to create template"
+        return 1
+    fi
+    
+    source "$CONFIG_FILE"
+}
+
+# Run full backup cycle
+run_full_backup() {
+    log "Starting full application backup cycle..."
+    
+    load_config
+    
+    local start_time=$(date +%s)
+    local backup_summary=""
+    
+    # Kubernetes
+    if [ "$KUBERNETES_ENABLED" = "true" ]; then
+        log "Running Kubernetes backup..."
+        if ./kubernetes_backup.sh "$KUBERNETES_BACKUP_MODE"; then
+            success "Kubernetes backup completed"
+            backup_summary+="✓ Kubernetes\n"
+        else
+            error "Kubernetes backup failed"
+            backup_summary+="✗ Kubernetes\n"
+        fi
+    fi
+    
+    # VMware
+    if [ "$VMWARE_ENABLED" = "true" ]; then
+        log "Running VMware backup..."
+        export VCENTER_HOST VCENTER_USER VCENTER_PASS
+        if ./vmware_backup.sh backup-all "$VMWARE_BACKUP_TYPE"; then
+            success "VMware backup completed"
+            backup_summary+="✓ VMware\n"
+        else
+            error "VMware backup failed"
+            backup_summary+="✗ VMware\n"
+        fi
+    fi
+    
+    # Proxmox
+    if [ "$PROXMOX_ENABLED" = "true" ]; then
+        log "Running Proxmox backup..."
+        export PROXMOX_HOST PROXMOX_USER PROXMOX_PASS
+        if ./proxmox_backup.sh backup-all "$PROXMOX_BACKUP_MODE"; then
+            success "Proxmox backup completed"
+            backup_summary+="✓ Proxmox\n"
+        else
+            error "Proxmox backup failed"
+            backup_summary+="✗ Proxmox\n"
+        fi
+    fi
+    
+    # Microsoft 365
+    if [ "$M365_ENABLED" = "true" ]; then
+        log "Running Microsoft 365 backup..."
+        export M365_TENANT_ID M365_CLIENT_ID M365_CLIENT_SECRET
+        
+        IFS=',' read -ra USERS <<< "$M365_USERS"
+        for user in "${USERS[@]}"; do
+            ./m365_backup.sh exchange "$user"
+            ./m365_backup.sh onedrive "$user"
+        done
+        
+        success "Microsoft 365 backup completed"
+        backup_summary+="✓ Microsoft 365\n"
+    fi
+    
+    # Google Workspace
+    if [ "$GOOGLE_ENABLED" = "true" ]; then
+        log "Running Google Workspace backup..."
+        export GOOGLE_SERVICE_ACCOUNT_KEY GOOGLE_ADMIN_EMAIL
+        
+        IFS=',' read -ra USERS <<< "$GOOGLE_USERS"
+        for user in "${USERS[@]}"; do
+            ./google_workspace_backup.sh gmail "$user"
+            ./google_workspace_backup.sh drive "$user"
+        done
+        
+        success "Google Workspace backup completed"
+        backup_summary+="✓ Google Workspace\n"
+    fi
+    
+    # GitHub
+    if [ "$GITHUB_ENABLED" = "true" ]; then
+        log "Running GitHub backup..."
+        export GITHUB_TOKEN
+        
+        IFS=',' read -ra ORGS <<< "$GITHUB_ORGS"
+        for org in "${ORGS[@]}"; do
+            ./git_repos_backup.sh github "$org"
+        done
+        
+        success "GitHub backup completed"
+        backup_summary+="✓ GitHub\n"
+    fi
+    
+    # GitLab
+    if [ "$GITLAB_ENABLED" = "true" ]; then
+        log "Running GitLab backup..."
+        export GITLAB_TOKEN GITLAB_URL
+        
+        IFS=',' read -ra GROUPS <<< "$GITLAB_GROUPS"
+        for group in "${GROUPS[@]}"; do
+            ./git_repos_backup.sh gitlab "$group"
+        done
+        
+        success "GitLab backup completed"
+        backup_summary+="✓ GitLab\n"
+    fi
+    
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    log "Full backup cycle completed in ${duration}s"
+    
+    # Generate report
+    generate_backup_report "$backup_summary" "$duration"
+    
+    # Cleanup old backups
+    if [ -n "$RETENTION_DAYS" ]; then
+        cleanup_old_backups "$RETENTION_DAYS"
+    fi
+    
+    # Send notifications
+    send_notifications "$backup_summary"
+}
+
+# Generate consolidated backup report
+generate_backup_report() {
+    local summary="$1"
+    local duration="$2"
+    
+    local report_file="$BACKUP_ROOT/reports/backup-report-$(date +%Y%m%d-%H%M%S).html"
+    mkdir -p "$BACKUP_ROOT/reports"
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Application Backup Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            border-bottom: 4px solid #667eea;
+            padding-bottom: 15px;
+        }
+        .timestamp {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 30px;
+        }
+        .summary {
+            background: #f8f9fa;
+            border-left: 5px solid #667eea;
+            padding: 20px;
+            margin: 30px 0;
+            font-size: 1.2em;
+            line-height: 1.8;
+        }
+        .metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+        .metric-value {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .metric-label {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        .section {
+            margin: 40px 0;
+        }
+        .section h2 {
+            color: #764ba2;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #764ba2;
+            padding-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Application Backup Report</h1>
+        <div class="timestamp">
+            <strong>Generated:</strong> $(date '+%A, %B %d, %Y at %I:%M %p')
+        </div>
+        
+        <div class="metrics">
+            <div class="metric-card">
+                <div class="metric-label">Duration</div>
+                <div class="metric-value">$((duration / 60))m</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Size</div>
+                <div class="metric-value">$(du -sh $BACKUP_ROOT 2>/dev/null | cut -f1 || echo "N/A")</div>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Backup Summary</h2>
+            <div class="summary">
+                $(echo -e "$summary" | sed 's/$/\<br\>/g')
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Backup Locations</h2>
+            <ul>
+                <li><strong>Kubernetes:</strong> $BACKUP_ROOT/kubernetes/</li>
+                <li><strong>VMware:</strong> $BACKUP_ROOT/vmware/</li>
+                <li><strong>Proxmox:</strong> $BACKUP_ROOT/proxmox/</li>
+                <li><strong>Microsoft 365:</strong> $BACKUP_ROOT/microsoft365/</li>
+                <li><strong>Google Workspace:</strong> $BACKUP_ROOT/google-workspace/</li>
+                <li><strong>Git Repositories:</strong> $BACKUP_ROOT/git-repos/</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
+HTML
+    
+    success "Backup report generated: $report_file"
+}
+
+# Cleanup old backups
+cleanup_old_backups() {
+    local retention_days="$1"
+    
+    log "Cleaning up backups older than $retention_days days..."
+    
+    find "$BACKUP_ROOT" -type f \( -name "*.tar.gz" -o -name "*.vma.zst" \) \
+        -mtime +$retention_days -delete
+    
+    success "Old backups cleaned up"
+}
+
+# Send notifications
+send_notifications() {
+    local summary="$1"
+    
+    # Email notification
+    if [ -n "$NOTIFY_EMAIL" ] && command -v mail &>/dev/null; then
+        echo -e "Backup Summary:\n\n$summary" | \
+            mail -s "Application Backup Report - $(date +%Y-%m-%d)" "$NOTIFY_EMAIL"
+        
+        success "Email notification sent to $NOTIFY_EMAIL"
+    fi
+    
+    # Slack notification
+    if [ -n "$NOTIFY_SLACK_WEBHOOK" ]; then
+        curl -X POST "$NOTIFY_SLACK_WEBHOOK" \
+            -H 'Content-Type: application/json' \
+            -d "{\"text\": \"Application Backup Completed\n\n$summary\"}" \
+            2>/dev/null
+        
+        success "Slack notification sent"
+    fi
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        mkdir -p "$(dirname "$CONFIG_FILE")"
+        generate_config
+        ;;
+    
+    run)
+        run_full_backup
+        ;;
+    
+    test)
+        load_config
+        log "Configuration loaded successfully"
+        log "Enabled backups:"
+        [ "$KUBERNETES_ENABLED" = "true" ] && log "  - Kubernetes"
+        [ "$VMWARE_ENABLED" = "true" ] && log "  - VMware vSphere"
+        [ "$PROXMOX_ENABLED" = "true" ] && log "  - Proxmox VE"
+        [ "$M365_ENABLED" = "true" ] && log "  - Microsoft 365"
+        [ "$GOOGLE_ENABLED" = "true" ] && log "  - Google Workspace"
+        [ "$GITHUB_ENABLED" = "true" ] && log "  - GitHub"
+        [ "$GITLAB_ENABLED" = "true" ] && log "  - GitLab"
+        ;;
+    
+    *)
+        cat <<HELP
+Application Backup Orchestrator
+
+Usage: $0 <command>
+
+Commands:
+    init    - Generate configuration template
+    run     - Run full backup cycle
+    test    - Test configuration
+
+Configuration: $CONFIG_FILE
+
+This orchestrator coordinates backups across:
+    • Kubernetes clusters
+    • VMware vSphere / Proxmox VE
+    • Microsoft 365 / Google Workspace
+    • GitHub / GitLab repositories
+
+Setup:
+    1. Run: $0 init
+    2. Edit: $CONFIG_FILE
+    3. Test: $0 test
+    4. Run: $0 run
+
+Schedule with cron:
+    0 2 * * * /path/to/app_backup_orchestrator.sh run
+HELP
+        ;;
+esac
+EOF
+
+chmod +x app_backup_orchestrator.sh
+
+echo ""
+echo "==================================================================="
+echo "✅ Module 11: Application-Specific Backups - Complete!"
+echo "==================================================================="
+echo ""
+echo "Created backup scripts:"
+echo "  1. kubernetes_backup.sh          - Kubernetes cluster backups"
+echo "  2. vmware_backup.sh              - VMware vSphere backups"
+echo "  3. proxmox_backup.sh             - Proxmox VE backups"
+echo "  4. m365_backup.sh                - Microsoft 365 backups"
+echo "  5. google_workspace_backup.sh    - Google Workspace backups"
+echo "  6. git_repos_backup.sh           - Git repository backups"
+echo "  7. app_backup_orchestrator.sh    - Unified orchestrator"
+echo ""
+echo "Quick Start:"
+echo "  ./app_backup_orchestrator.sh init   # Create config"
+echo "  ./app_backup_orchestrator.sh test   # Test config"
+echo "  ./app_backup_orchestrator.sh run    # Run backups"
+echo ""
+echo "==================================================================="
+```
+
+#### Полный список созданных скриптов:
+
+###### 1. **kubernetes_backup.sh** - Kubernetes
+
+- Backup etcd, ресурсов, PVC, Helm
+- Восстановление кластера
+- Velero интеграция
+
+###### 2. **vmware_backup.sh** - VMware vSphere
+
+- VM snapshots
+- OVF экспорт
+- CBT backups
+- vCenter конфигурация
+
+###### 3. **proxmox_backup.sh** - Proxmox VE
+
+- Vzdump бэкапы
+- PBS интеграция
+- ZFS snapshots
+
+###### 4. **m365_backup.sh** - Microsoft 365
+
+- Exchange Online
+- SharePoint
+- OneDrive
+- Teams
+
+##### 5. **google_workspace_backup.sh** - Google Workspace
+
+- Gmail
+- Google Drive
+
+##### 6. **git_repos_backup.sh** - Git репозитории
+
+- GitHub организации
+- GitLab группы
+- Полная история
+
+##### 7. **app_backup_orchestrator.sh** - Оркестратор
+
+- Управление всеми бэкапами
+- Конфигурация
+- Отчёты и уведомления

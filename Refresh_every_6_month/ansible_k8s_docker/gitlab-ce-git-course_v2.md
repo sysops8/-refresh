@@ -1202,7 +1202,7 @@ test:integration:
 
      - Remove tags older than: 30 days
      - Remove untagged manifests: Yes
-
+```
 7. **Используй образы из registry в deployment:**
 ```yaml
 deploy:staging:
@@ -1210,6 +1210,7 @@ deploy:staging:
   script:
     - echo "Deploying from registry..."
 ```
+
 
 ### 🚀 Бонус (новое)
 

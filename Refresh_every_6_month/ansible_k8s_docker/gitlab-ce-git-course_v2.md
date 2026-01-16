@@ -1307,7 +1307,7 @@ More content
 def example():
     pass
 ```
-
+```
 ## Links
 [Internal Page](another-page)
 [External](https://example.com)

@@ -26569,3 +26569,3269 @@ chmod +x module12_complete_setup.sh
 **Успехов в production! 🚀**
 
 
+# Модуль 13: Cost Optimization & FinOps для Backup Infrastructure (15 минут)
+
+## 🎯 Напоминалка
+
+### Storage Tiering Strategy
+
+```
+Cost-Optimized Backup Architecture
+═══════════════════════════════════
+
+Data Age │ Storage Tier      │ Cost/GB/mo │ Access Time │ Use Case
+─────────┼──────────────────┼────────────┼─────────────┼────────────────
+0-7 days │ Hot (NVMe/SSD)   │ $0.10      │ Instant     │ Quick recovery
+7-30 days│ Warm (HDD/NAS)   │ $0.03      │ Minutes     │ Standard backup
+30-90 d  │ Cool (S3 IA)     │ $0.0125    │ Minutes     │ Compliance
+90-365 d │ Cold (S3 Glacier)│ $0.004     │ Hours       │ Long-term
+1+ years │ Archive (Deep)   │ $0.00099   │ 12-48 hours │ Legal hold
+
+Storage Lifecycle Flow
+──────────────────────
+
+[Production Data] 
+       ↓ (Real-time/Daily)
+   [Hot Tier - SSD]
+       ↓ (After 7 days)
+   [Warm Tier - HDD]
+       ↓ (After 30 days)
+   [Cool Tier - S3 IA]
+       ↓ (After 90 days)
+   [Cold Tier - Glacier]
+       ↓ (After 1 year)
+   [Archive - Deep Archive]
+```
+
+### Deduplication Impact Analysis
+
+```
+Deduplication Strategies
+════════════════════════
+
+┌─────────────────────────────────────────────────────┐
+│ Block-Level Deduplication                           │
+│ - Chunks: 4KB-128KB blocks                         │
+│ - Ratio: 10:1 to 50:1 typical                     │
+│ - CPU: High                                         │
+│ - Best for: VM backups, database files             │
+└─────────────────────────────────────────────────────┘
+       ↓ Space Savings: 80-95%
+
+┌─────────────────────────────────────────────────────┐
+│ File-Level Deduplication                            │
+│ - Whole file comparison                            │
+│ - Ratio: 2:1 to 5:1 typical                       │
+│ - CPU: Low                                          │
+│ - Best for: Document archives, media files         │
+└─────────────────────────────────────────────────────┘
+       ↓ Space Savings: 40-60%
+
+┌─────────────────────────────────────────────────────┐
+│ Source vs Target Deduplication                      │
+│                                                     │
+│ Source Dedup:  Client-side, saves bandwidth        │
+│ Target Dedup:  Server-side, saves storage          │
+│                                                     │
+│ Hybrid: Best of both worlds                        │
+└─────────────────────────────────────────────────────┘
+
+Compression + Dedup Combined Effect
+───────────────────────────────────
+Original Size:     1000 GB
+After Dedup (20:1): 50 GB
+After Compress (3:1): 16.7 GB
+
+Total Reduction: 98.3% 🎯
+```
+
+### Compression Benchmark Matrix
+
+```
+Compression Algorithm Performance Matrix
+════════════════════════════════════════
+
+Algorithm │ Ratio │ Speed (MB/s) │ CPU Load │ Use Case
+──────────┼───────┼──────────────┼──────────┼────────────────────
+gzip -1   │ 2.5x  │ 120          │ Low      │ Fast backups
+gzip -6   │ 3.5x  │ 80           │ Medium   │ Balanced (default)
+gzip -9   │ 4.0x  │ 30           │ High     │ Max compression
+──────────┼───────┼──────────────┼──────────┼────────────────────
+lz4       │ 2.0x  │ 450          │ Very Low │ Speed critical
+lz4 -9    │ 2.5x  │ 180          │ Low      │ Fast + decent ratio
+──────────┼───────┼──────────────┼──────────┼────────────────────
+zstd -1   │ 2.8x  │ 400          │ Low      │ Modern default
+zstd -10  │ 4.5x  │ 100          │ Medium   │ Best balance ⭐
+zstd -19  │ 5.5x  │ 15           │ High     │ Archive quality
+──────────┼───────┼──────────────┼──────────┼────────────────────
+xz -3     │ 5.0x  │ 40           │ High     │ Long-term archive
+xz -9     │ 6.5x  │ 8            │ Very High│ Maximum compression
+──────────┼───────┼──────────────┼──────────┼────────────────────
+bzip2     │ 4.0x  │ 25           │ High     │ Legacy systems
+
+Recommendation Matrix by Data Type
+──────────────────────────────────
+
+Data Type         │ Best Algorithm    │ Reasoning
+──────────────────┼──────────────────┼─────────────────────────
+Databases         │ zstd -3 to -10   │ Balance speed/ratio
+Log files         │ zstd -10 to -15  │ High text compression
+Media (video/img) │ lz4 or store     │ Already compressed
+Code repositories │ zstd -10         │ Great for text/code
+VM images         │ zstd -6          │ Mixed content
+Documents         │ xz -6            │ Archive quality
+Incremental       │ lz4              │ Speed for frequent backups
+```
+
+### Cost Optimization Framework
+
+```
+Backup Cost Components
+══════════════════════
+
+1. Storage Costs (60-70% of total)
+   ├── Primary storage
+   ├── Replica storage
+   ├── Cloud storage
+   └── Archive storage
+
+2. Compute Costs (15-20%)
+   ├── Backup servers
+   ├── Compression CPU
+   ├── Deduplication processing
+   └── Cloud compute (snapshots, restores)
+
+3. Network Costs (5-10%)
+   ├── Bandwidth to cloud
+   ├── Cross-region transfers
+   └── Restore bandwidth
+
+4. Management Costs (10-15%)
+   ├── Licensing
+   ├── Staff time
+   ├── Monitoring tools
+   └── DR testing
+
+Cost Optimization Levers
+════════════════════════
+
+┌──────────────────────────────────────────┐
+│ 1. Storage Tiering                       │
+│    Impact: 50-70% cost reduction         │
+│    Effort: Low                           │
+│    ROI: ⭐⭐⭐⭐⭐                       │
+└──────────────────────────────────────────┘
+
+┌──────────────────────────────────────────┐
+│ 2. Deduplication                         │
+│    Impact: 60-90% storage reduction      │
+│    Effort: Medium                        │
+│    ROI: ⭐⭐⭐⭐⭐                       │
+└──────────────────────────────────────────┘
+
+┌──────────────────────────────────────────┐
+│ 3. Compression Optimization              │
+│    Impact: 50-70% additional reduction   │
+│    Effort: Low                           │
+│    ROI: ⭐⭐⭐⭐                         │
+└──────────────────────────────────────────┘
+
+┌──────────────────────────────────────────┐
+│ 4. Retention Policy Tuning               │
+│    Impact: 30-50% storage reduction      │
+│    Effort: Low                           │
+│    ROI: ⭐⭐⭐⭐⭐                       │
+└──────────────────────────────────────────┘
+
+┌──────────────────────────────────────────┐
+│ 5. Multi-Cloud Arbitrage                 │
+│    Impact: 20-40% cost reduction         │
+│    Effort: High                          │
+│    ROI: ⭐⭐⭐                           │
+└──────────────────────────────────────────┘
+```
+
+---
+
+## 💻 Задание 1: Comprehensive Cost Analysis Tool
+
+````bash
+cat > backup_cost_analyzer.sh <<'EOF'
+Вот отформатированный скрипт без улучшений:
+
+```bash
+cat > backup_cost_analyzer.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+ANALYSIS_DIR="/var/backup-cost-analysis"
+REPORT_FILE="$ANALYSIS_DIR/cost_analysis_$(date +%Y%m%d).html"
+BACKUP_ROOT="/backup"
+
+# Storage pricing (example values - adjust for your provider)
+declare -A STORAGE_COSTS=(
+    ["nvme"]="0.10"      # $/GB/month
+    ["ssd"]="0.08"
+    ["hdd"]="0.03"
+    ["nas"]="0.03"
+    ["s3-standard"]="0.023"
+    ["s3-ia"]="0.0125"
+    ["s3-glacier"]="0.004"
+    ["s3-deep"]="0.00099"
+    ["backblaze-b2"]="0.005"
+    ["wasabi"]="0.0059"
+)
+
+# Compute pricing ($/hour)
+declare -A COMPUTE_COSTS=(
+    ["t3.small"]="0.0208"
+    ["t3.medium"]="0.0416"
+    ["t3.large"]="0.0832"
+    ["c5.large"]="0.085"
+    ["c5.xlarge"]="0.170"
+)
+
+# Network pricing ($/GB)
+NETWORK_COST_OUT="0.09"  # Data transfer out
+NETWORK_COST_IN="0.00"   # Data transfer in (free)
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$ANALYSIS_DIR/analysis.log"
+}
+
+# Initialize analysis
+init_analysis() {
+    log "Initializing backup cost analysis..."
+    
+    mkdir -p "$ANALYSIS_DIR"/{data,reports,recommendations}
+    
+    log "Analysis directory: $ANALYSIS_DIR"
+}
+
+# Analyze current storage costs
+analyze_storage_costs() {
+    log "Analyzing storage costs..."
+    
+    local storage_analysis="$ANALYSIS_DIR/data/storage_analysis.json"
+    
+    # Collect storage data
+    cat > "$storage_analysis" <<JSON
+{
+  "analysis_date": "$(date -I)",
+  "storage_tiers": []
+}
+JSON
+    
+    # Analyze each storage location
+    local total_size_gb=0
+    local total_monthly_cost=0
+    
+    for location in "$BACKUP_ROOT"/*; do
+        if [ ! -d "$location" ]; then
+            continue
+        fi
+        
+        local name=$(basename "$location")
+        local size_bytes=$(du -sb "$location" 2>/dev/null | awk '{print $1}')
+        local size_gb=$(echo "scale=2; $size_bytes / 1024 / 1024 / 1024" | bc)
+        
+        # Determine storage tier (example logic)
+        local tier="hdd"  # default
+        if [[ "$name" =~ hot|recent ]]; then
+            tier="ssd"
+        elif [[ "$name" =~ archive|old ]]; then
+            tier="s3-glacier"
+        fi
+        
+        local cost_per_gb="${STORAGE_COSTS[$tier]}"
+        local monthly_cost=$(echo "scale=2; $size_gb * $cost_per_gb" | bc)
+        
+        total_size_gb=$(echo "scale=2; $total_size_gb + $size_gb" | bc)
+        total_monthly_cost=$(echo "scale=2; $total_monthly_cost + $monthly_cost" | bc)
+        
+        log "  $name: ${size_gb}GB @ \$${cost_per_gb}/GB/mo = \$${monthly_cost}/mo [$tier]"
+        
+        # Add to JSON
+        jq --arg name "$name" \
+           --arg tier "$tier" \
+           --arg size "$size_gb" \
+           --arg cost "$monthly_cost" \
+           '.storage_tiers += [{
+               "name": $name,
+               "tier": $tier,
+               "size_gb": ($size | tonumber),
+               "monthly_cost": ($cost | tonumber)
+           }]' "$storage_analysis" > "${storage_analysis}.tmp"
+        mv "${storage_analysis}.tmp" "$storage_analysis"
+    done
+    
+    # Add totals to JSON
+    jq --arg total_size "$total_size_gb" \
+       --arg total_cost "$total_monthly_cost" \
+       '. + {
+           "total_size_gb": ($total_size | tonumber),
+           "total_monthly_cost": ($total_cost | tonumber),
+           "annual_cost": (($total_cost | tonumber) * 12)
+       }' "$storage_analysis" > "${storage_analysis}.tmp"
+    mv "${storage_analysis}.tmp" "$storage_analysis"
+    
+    log "Total storage: ${total_size_gb}GB"
+    log "Monthly storage cost: \$${total_monthly_cost}"
+    log "Annual storage cost: \$$(echo "scale=2; $total_monthly_cost * 12" | bc)"
+}
+
+# Analyze deduplication savings
+analyze_deduplication_savings() {
+    log "Analyzing deduplication potential..."
+    
+    # Calculate apparent vs actual size
+    local apparent_size=$(du -sb --apparent-size "$BACKUP_ROOT" 2>/dev/null | awk '{print $1}')
+    local actual_size=$(du -sb "$BACKUP_ROOT" 2>/dev/null | awk '{print $1}')
+    
+    local apparent_gb=$(echo "scale=2; $apparent_size / 1024 / 1024 / 1024" | bc)
+    local actual_gb=$(echo "scale=2; $actual_size / 1024 / 1024 / 1024" | bc)
+    
+    local dedup_ratio=1
+    if [ "$actual_size" -gt 0 ]; then
+        dedup_ratio=$(echo "scale=2; $apparent_size / $actual_size" | bc)
+    fi
+    
+    local space_saved_gb=$(echo "scale=2; $apparent_gb - $actual_gb" | bc)
+    local space_saved_pct=$(echo "scale=2; ($space_saved_gb / $apparent_gb) * 100" | bc)
+    
+    # Estimate cost savings
+    local avg_storage_cost="0.03"  # Average $/GB/month
+    local monthly_savings=$(echo "scale=2; $space_saved_gb * $avg_storage_cost" | bc)
+    local annual_savings=$(echo "scale=2; $monthly_savings * 12" | bc)
+    
+    log "Deduplication Analysis:"
+    log "  Apparent size: ${apparent_gb}GB"
+    log "  Actual size: ${actual_gb}GB"
+    log "  Dedup ratio: ${dedup_ratio}:1"
+    log "  Space saved: ${space_saved_gb}GB (${space_saved_pct}%)"
+    log "  Monthly savings: \$${monthly_savings}"
+    log "  Annual savings: \$${annual_savings}"
+    
+    # Save to JSON
+    cat > "$ANALYSIS_DIR/data/deduplication.json" <<JSON
+{
+  "apparent_size_gb": $apparent_gb,
+  "actual_size_gb": $actual_gb,
+  "dedup_ratio": $dedup_ratio,
+  "space_saved_gb": $space_saved_gb,
+  "space_saved_percent": $space_saved_pct,
+  "monthly_savings": $monthly_savings,
+  "annual_savings": $annual_savings
+}
+JSON
+}
+
+# Benchmark compression algorithms
+benchmark_compression() {
+    log "Benchmarking compression algorithms..."
+    
+    # Create test file (100MB)
+    local test_file="/tmp/compression_test_$$.dat"
+    dd if=/dev/urandom of="$test_file" bs=1M count=100 2>/dev/null
+    
+    local original_size=$(stat -c %s "$test_file")
+    local original_mb=$(echo "scale=2; $original_size / 1024 / 1024" | bc)
+    
+    log "Test file size: ${original_mb}MB"
+    
+    # Benchmark each algorithm
+    local results="$ANALYSIS_DIR/data/compression_benchmark.json"
+    echo '{"algorithms": []}' > "$results"
+    
+    for algo_cmd in "gzip -1" "gzip -6" "gzip -9" "lz4" "lz4 -9" \
+                    "zstd -1" "zstd -10" "zstd -19" "xz -3" "xz -9"; do
+        
+        local algo=$(echo "$algo_cmd" | awk '{print $1}')
+        local level=$(echo "$algo_cmd" | awk '{print $2}')
+        
+        if ! command -v "$algo" &>/dev/null; then
+            log "  Skipping $algo (not installed)"
+            continue
+        fi
+        
+        log "  Testing: $algo_cmd"
+        
+        local compressed_file="${test_file}.${algo}"
+        
+        # Compress and time it
+        local start_time=$(date +%s.%N)
+        $algo_cmd < "$test_file" > "$compressed_file" 2>/dev/null
+        local end_time=$(date +%s.%N)
+        
+        local duration=$(echo "scale=2; $end_time - $start_time" | bc)
+        local compressed_size=$(stat -c %s "$compressed_file")
+        local compressed_mb=$(echo "scale=2; $compressed_size / 1024 / 1024" | bc)
+        local ratio=$(echo "scale=2; $original_size / $compressed_size" | bc)
+        local speed_mbps=$(echo "scale=2; $original_mb / $duration" | bc)
+        local space_saved_pct=$(echo "scale=2; (1 - $compressed_size / $original_size) * 100" | bc)
+        
+        log "    Size: ${compressed_mb}MB, Ratio: ${ratio}:1, Speed: ${speed_mbps}MB/s, Saved: ${space_saved_pct}%"
+        
+        # Add to results
+        jq --arg algo "$algo" \
+           --arg level "${level:--}" \
+           --arg ratio "$ratio" \
+           --arg speed "$speed_mbps" \
+           --arg size "$compressed_mb" \
+           --arg saved "$space_saved_pct" \
+           '.algorithms += [{
+               "algorithm": $algo,
+               "level": $level,
+               "ratio": ($ratio | tonumber),
+               "speed_mbps": ($speed | tonumber),
+               "compressed_size_mb": ($size | tonumber),
+               "space_saved_percent": ($saved | tonumber)
+           }]' "$results" > "${results}.tmp"
+        mv "${results}.tmp" "$results"
+        
+        rm -f "$compressed_file"
+    done
+    
+    # Clean up
+    rm -f "$test_file"
+    
+    log "Compression benchmark completed"
+}
+
+# Calculate optimal retention policy costs
+calculate_retention_costs() {
+    log "Calculating retention policy costs..."
+    
+    local retention_analysis="$ANALYSIS_DIR/data/retention_costs.json"
+    
+    # Example retention policies
+    cat > "$retention_analysis" <<'JSON'
+{
+  "policies": [
+    {
+      "name": "Aggressive (7-30-90)",
+      "daily": 7,
+      "weekly": 4,
+      "monthly": 3,
+      "description": "Minimal retention"
+    },
+    {
+      "name": "Standard (30-90-365)",
+      "daily": 30,
+      "weekly": 12,
+      "monthly": 12,
+      "description": "Balanced approach"
+    },
+    {
+      "name": "Conservative (90-365-2555)",
+      "daily": 90,
+      "weekly": 52,
+      "monthly": 84,
+      "description": "Maximum retention"
+    }
+  ]
+}
+JSON
+    
+    # Calculate costs for each policy
+    local daily_backup_size_gb=50  # Example: 50GB per daily backup
+    local storage_cost_per_gb=0.03 # $/GB/month
+    
+    for policy_name in "Aggressive" "Standard" "Conservative"; do
+        local daily_retention=$(jq -r ".policies[] | select(.name | contains(\"$policy_name\")) | .daily" "$retention_analysis")
+        local weekly_retention=$(jq -r ".policies[] | select(.name | contains(\"$policy_name\")) | .weekly" "$retention_analysis")
+        local monthly_retention=$(jq -r ".policies[] | select(.name | contains(\"$policy_name\")) | .monthly" "$retention_analysis")
+        
+        # Calculate total storage needed
+        local daily_storage=$(echo "scale=2; $daily_backup_size_gb * $daily_retention" | bc)
+        local weekly_storage=$(echo "scale=2; $daily_backup_size_gb * $weekly_retention" | bc)
+        local monthly_storage=$(echo "scale=2; $daily_backup_size_gb * $monthly_retention" | bc)
+        
+        local total_storage=$(echo "scale=2; $daily_storage + $weekly_storage + $monthly_storage" | bc)
+        local monthly_cost=$(echo "scale=2; $total_storage * $storage_cost_per_gb" | bc)
+        local annual_cost=$(echo "scale=2; $monthly_cost * 12" | bc)
+        
+        # Update JSON
+        jq --arg name "$policy_name" \
+           --arg storage "$total_storage" \
+           --arg monthly "$monthly_cost" \
+           --arg annual "$annual_cost" \
+           '(.policies[] | select(.name | contains($name))) += {
+               "total_storage_gb": ($storage | tonumber),
+               "monthly_cost": ($monthly | tonumber),
+               "annual_cost": ($annual | tonumber)
+           }' "$retention_analysis" > "${retention_analysis}.tmp"
+        mv "${retention_analysis}.tmp" "$retention_analysis"
+        
+        log "  $policy_name: ${total_storage}GB = \$${monthly_cost}/mo (\$${annual_cost}/year)"
+    done
+}
+
+# Analyze cloud provider costs
+analyze_cloud_costs() {
+    log "Analyzing cloud provider costs..."
+    
+    local cloud_analysis="$ANALYSIS_DIR/data/cloud_costs.json"
+    
+    # Example: Analyze costs for different providers
+    local backup_size_tb=10  # 10TB of backup data
+    
+    cat > "$cloud_analysis" <<JSON
+{
+  "backup_size_tb": $backup_size_tb,
+  "providers": []
+}
+JSON
+    
+    # AWS S3
+    local s3_standard_cost=$(echo "scale=2; $backup_size_tb * 1024 * ${STORAGE_COSTS['s3-standard']}" | bc)
+    local s3_ia_cost=$(echo "scale=2; $backup_size_tb * 1024 * ${STORAGE_COSTS['s3-ia']}" | bc)
+    local s3_glacier_cost=$(echo "scale=2; $backup_size_tb * 1024 * ${STORAGE_COSTS['s3-glacier']}" | bc)
+    
+    jq --arg name "AWS S3" \
+       --arg standard "$s3_standard_cost" \
+       --arg ia "$s3_ia_cost" \
+       --arg glacier "$s3_glacier_cost" \
+       '.providers += [{
+           "name": $name,
+           "tiers": {
+               "standard": ($standard | tonumber),
+               "infrequent_access": ($ia | tonumber),
+               "glacier": ($glacier | tonumber)
+           }
+       }]' "$cloud_analysis" > "${cloud_analysis}.tmp"
+    mv "${cloud_analysis}.tmp" "$cloud_analysis"
+    
+    # Backblaze B2
+    local b2_cost=$(echo "scale=2; $backup_size_tb * 1024 * ${STORAGE_COSTS['backblaze-b2']}" | bc)
+    
+    jq --arg name "Backblaze B2" \
+       --arg cost "$b2_cost" \
+       '.providers += [{
+           "name": $name,
+           "monthly_cost": ($cost | tonumber)
+       }]' "$cloud_analysis" > "${cloud_analysis}.tmp"
+    mv "${cloud_analysis}.tmp" "$cloud_analysis"
+    
+    # Wasabi
+    local wasabi_cost=$(echo "scale=2; $backup_size_tb * 1024 * ${STORAGE_COSTS['wasabi']}" | bc)
+    
+    jq --arg name "Wasabi" \
+       --arg cost "$wasabi_cost" \
+       '.providers += [{
+           "name": $name,
+           "monthly_cost": ($cost | tonumber)
+       }]' "$cloud_analysis" > "${cloud_analysis}.tmp"
+    mv "${cloud_analysis}.tmp" "$cloud_analysis"
+    
+    log "Cloud cost analysis completed"
+}
+
+# Generate cost optimization recommendations
+generate_recommendations() {
+    log "Generating cost optimization recommendations..."
+    
+    local recommendations_file="$ANALYSIS_DIR/recommendations/cost_optimizations.md"
+    
+    cat > "$recommendations_file" <<'RECOMMENDATIONS'
+# Backup Cost Optimization Recommendations
+
+## Quick Wins (Immediate Impact)
+
+### 1. Implement Storage Tiering
+**Impact:** 50-70% storage cost reduction
+**Effort:** Low
+**Implementation:**
+
+# Move data older than 30 days to cold storage
+find /backup -type f -mtime +30 -exec aws s3 mv {} s3://bucket/cold-tier/ \;
+
+### 2. Enable Compression
+**Impact:** 50-70% storage reduction
+**Effort:** Low
+**Recommendation:** Use zstd -10 for best balance
+
+# Compress existing backups
+find /backup -name "*.sql" -exec zstd -10 {} \;
+
+### 3. Optimize Retention Policy
+**Impact:** 30-50% storage reduction
+**Effort:** Low
+**Current:** Review existing retention periods
+**Recommended:** Implement GFS rotation
+
+### 4. Enable Deduplication
+**Impact:** 60-90% storage reduction (if not enabled)
+**Effort:** Medium
+**Options:**
+- ZFS: `zfs set dedup=on pool/dataset`
+- Borgbackup: Built-in deduplication
+- Restic: Automatic deduplication
+
+## Medium-Term Optimizations (1-3 months)
+
+### 5. Multi-Cloud Arbitrage
+**Impact:** 20-40% cost reduction
+**Effort:** High
+**Strategy:**
+- Hot data: Local storage
+- Warm data: Backblaze B2
+- Cold data: S3 Glacier Deep Archive
+
+### 6. Implement Incremental-Forever
+**Impact:** 40-60% backup size reduction
+**Effort:** Medium
+**Tools:** Restic, Borg, Duplicacy
+
+### 7. Optimize Network Costs
+**Impact:** 15-30% transfer cost reduction
+**Techniques:**
+- Compress before transfer
+- Use DirectConnect/ExpressRoute
+- Schedule transfers during off-peak hours
+
+## Long-Term Strategies (3-12 months)
+
+### 8. Implement FinOps Framework
+**Components:**
+- Cost monitoring dashboard
+- Budget alerts
+- Showback/chargeback by team
+- Regular cost reviews
+
+### 9. Migrate to Object Storage
+**Impact:** 30-50% infrastructure cost reduction
+**Benefits:**
+- No storage management overhead
+- Built-in durability
+- Automatic tiering
+
+### 10. Automate Lifecycle Policies
+**Impact:** 25-40% ongoing cost reduction
+**Implementation:**
+- Automatic tiering based on age
+- Automatic deletion of expired backups
+- Compliance-driven retention
+
+## Cost Reduction Roadmap
+
+Month 1-2: Quick Wins
+├── Implement compression
+├── Enable deduplication
+└── Optimize retention policy
+    Projected Savings: 60-70%
+
+Month 3-6: Medium-Term
+├── Implement storage tiering
+├── Multi-cloud strategy
+└── Incremental-forever backups
+    Additional Savings: 20-30%
+
+Month 6-12: Long-Term
+├── Full FinOps framework
+├── Automation & optimization
+└── Continuous improvement
+    Additional Savings: 10-20%
+
+Total Potential Savings: 75-85%
+
+## Monitoring & Optimization Cycle
+
+1. **Monthly Review:** Analyze storage growth and costs
+2. **Quarterly Audit:** Review retention policies and compliance
+3. **Annual Assessment:** Re-evaluate cloud provider pricing
+4. **Continuous:** Monitor for waste and inefficiency
+
+## Key Metrics to Track
+
+- Cost per GB backed up
+- Cost per protected server/app
+- Storage growth rate
+- Deduplication ratio
+- Compression ratio
+- Backup window utilization
+- Recovery test pass rate
+
+## ROI Calculator
+
+Example Scenario:
+- Current backup storage: 50TB
+- Current monthly cost: $1,500
+- Storage cost: $0.03/GB
+
+After Optimization:
+- Compression (3x): 50TB → 16.7TB
+- Deduplication (20x): 16.7TB → 0.84TB
+- Tiering (50% to cold): 0.84TB → 0.42TB hot + 0.42TB cold
+
+New Monthly Cost:
+- Hot (0.42TB @ $0.03): $12.60
+- Cold (0.42TB @ $0.004): $1.68
+- Total: $14.28/month
+
+Savings: $1,485.72/month = $17,828.64/year
+ROI: 97% cost reduction! 🎯
+RECOMMENDATIONS
+    
+    log "Recommendations saved to: $recommendations_file"
+}
+
+# Generate comprehensive cost report
+generate_cost_report() {
+    log "Generating comprehensive cost report..."
+    
+    cat > "$REPORT_FILE" <<'HTML'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backup Cost Analysis Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            border-bottom: 3px solid #764ba2;
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin: 15px 0;
+        }
+        .metric-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+        .chart-container {
+            background: #f8f9fa;
+            padding: 30px;
+            border-radius: 10px;
+            margin: 30px 0;
+        }
+        .chart-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .savings-highlight {
+            background: #e8f5e9;
+            border-left: 4px solid #4caf50;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .recommendation-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .cost-breakdown {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin: 30px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>💰 Backup Cost Analysis & Optimization Report</h1>
+        <p><strong>Generated:</strong> $(date)</p>
+        <p><strong>Analysis Period:</strong> Last 30 days</p>
+    
+    <div class="metrics-grid">
+HTML
+
+    # Read actual costs from JSON files
+    if [ -f "$ANALYSIS_DIR/data/storage_analysis.json" ]; then
+        local total_storage=$(jq -r '.total_size_gb' "$ANALYSIS_DIR/data/storage_analysis.json" 2>/dev/null || echo "0")
+        local monthly_cost=$(jq -r '.total_monthly_cost' "$ANALYSIS_DIR/data/storage_analysis.json" 2>/dev/null || echo "0")
+        local annual_cost=$(jq -r '.annual_cost' "$ANALYSIS_DIR/data/storage_analysis.json" 2>/dev/null || echo "0")
+    else
+        local total_storage="1250"
+        local monthly_cost="450"
+        local annual_cost="5400"
+    fi
+
+    cat >> "$REPORT_FILE" <<HTML
+        <div class="metric-card">
+            <div class="metric-label">Total Storage</div>
+            <div class="metric-value">${total_storage}<small>GB</small></div>
+        </div>
+        <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            <div class="metric-label">Monthly Cost</div>
+            <div class="metric-value">\$${monthly_cost}</div>
+        </div>
+        <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+            <div class="metric-label">Annual Cost</div>
+            <div class="metric-value">\$${annual_cost}</div>
+        </div>
+        <div class="metric-card" style="background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);">
+            <div class="metric-label">Potential Savings</div>
+            <div class="metric-value">75<small>%</small></div>
+        </div>
+    </div>
+    
+    <div class="savings-highlight">
+        <h2>💡 Optimization Potential</h2>
+        <p>Based on current analysis, you can reduce backup costs by <strong>75-85%</strong> through:</p>
+        <ul>
+            <li><strong>Compression:</strong> 50-70% storage reduction</li>
+            <li><strong>Deduplication:</strong> 60-90% additional reduction</li>
+            <li><strong>Storage Tiering:</strong> 50-70% cost reduction</li>
+            <li><strong>Retention Optimization:</strong> 30-50% reduction</li>
+        </ul>
+        <p><strong>Projected Annual Savings:</strong> $$(echo "scale=0; $annual_cost * 0.75" | bc)</p>
+    </div>
+    
+    <h2>Storage Cost Breakdown</h2>
+    <div class="chart-container">
+        <canvas id="storageCostChart"></canvas>
+    </div>
+    
+    <h2>Compression Benchmark Results</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Algorithm</th>
+                <th>Compression Ratio</th>
+                <th>Speed (MB/s)</th>
+                <th>Space Saved (%)</th>
+                <th>Recommendation</th>
+            </tr>
+        </thead>
+        <tbody>
+HTML
+
+    # Add compression benchmark data if available
+    if [ -f "$ANALYSIS_DIR/data/compression_benchmark.json" ]; then
+        jq -r '.algorithms[] | 
+            "<tr><td>\(.algorithm) \(.level)</td><td>\(.ratio):1</td><td>\(.speed_mbps)</td><td>\(.space_saved_percent)%</td><td>-</td></tr>"' \
+            "$ANALYSIS_DIR/data/compression_benchmark.json" >> "$REPORT_FILE" 2>/dev/null || true
+    else
+        cat >> "$REPORT_FILE" <<HTML
+            <tr><td>zstd -1</td><td>2.8:1</td><td>400</td><td>64%</td><td>Fast backups</td></tr>
+            <tr><td>zstd -10</td><td>4.5:1</td><td>100</td><td>78%</td><td>⭐ Best Balance</td></tr>
+            <tr><td>zstd -19</td><td>5.5:1</td><td>15</td><td>82%</td><td>Archive quality</td></tr>
+            <tr><td>lz4</td><td>2.0:1</td><td>450</td><td>50%</td><td>Speed critical</td></tr>
+            <tr><td>xz -9</td><td>6.5:1</td><td>8</td><td>85%</td><td>Maximum compression</td></tr>
+HTML
+    fi
+
+    cat >> "$REPORT_FILE" <<HTML
+        </tbody>
+    </table>
+    
+    <h2>Cloud Provider Cost Comparison</h2>
+    <div class="chart-container">
+        <canvas id="cloudCostChart"></canvas>
+    </div>
+    
+    <h2>Retention Policy Cost Analysis</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Policy</th>
+                <th>Daily</th>
+                <th>Weekly</th>
+                <th>Monthly</th>
+                <th>Total Storage</th>
+                <th>Monthly Cost</th>
+                <th>Annual Cost</th>
+            </tr>
+        </thead>
+        <tbody>
+HTML
+
+    # Add retention policy data if available
+    if [ -f "$ANALYSIS_DIR/data/retention_costs.json" ]; then
+        jq -r '.policies[] | 
+            "<tr><td>\(.name)</td><td>\(.daily)d</td><td>\(.weekly)w</td><td>\(.monthly)m</td><td>\(.total_storage_gb // 0)GB</td><td>$\(.monthly_cost // 0)</td><td>$\(.annual_cost // 0)</td></tr>"' \
+            "$ANALYSIS_DIR/data/retention_costs.json" >> "$REPORT_FILE" 2>/dev/null || true
+    else
+        cat >> "$REPORT_FILE" <<HTML
+            <tr><td>Aggressive (7-30-90)</td><td>7d</td><td>4w</td><td>3m</td><td>850GB</td><td>$25.50</td><td>$306</td></tr>
+            <tr><td>Standard (30-90-365)</td><td>30d</td><td>12w</td><td>12m</td><td>2700GB</td><td>$81.00</td><td>$972</td></tr>
+            <tr><td>Conservative (90-365-2555)</td><td>90d</td><td>52w</td><td>84m</td><td>11300GB</td><td>$339.00</td><td>$4068</td></tr>
+HTML
+    fi
+
+    cat >> "$REPORT_FILE" <<HTML
+        </tbody>
+    </table>
+    
+    <div class="recommendation-box">
+        <h2>🎯 Top Recommendations</h2>
+        <ol>
+            <li><strong>Immediate: Enable zstd compression</strong> - Reduce storage by 60-70% with minimal CPU overhead</li>
+            <li><strong>Week 1: Implement storage tiering</strong> - Move old backups to cold storage, save 50-70% on costs</li>
+            <li><strong>Week 2: Optimize retention policy</strong> - Review and adjust retention periods, reduce storage by 30-50%</li>
+            <li><strong>Month 1: Enable deduplication</strong> - If not already enabled, achieve 60-90% storage reduction</li>
+            <li><strong>Month 2: Multi-cloud strategy</strong> - Distribute backups across providers for optimal pricing</li>
+        </ol>
+    </div>
+    
+    <div class="cost-breakdown">
+        <div>
+            <h3>Current Monthly Costs</h3>
+            <ul>
+                <li>Storage: \$${monthly_cost}</li>
+                <li>Compute: \$$(echo "scale=2; $monthly_cost * 0.2" | bc)</li>
+                <li>Network: \$$(echo "scale=2; $monthly_cost * 0.1" | bc)</li>
+                <li>Total: \$$(echo "scale=2; $monthly_cost * 1.3" | bc)</li>
+            </ul>
+        </div>
+        <div>
+            <h3>Projected Optimized Costs</h3>
+            <ul>
+                <li>Storage: \$$(echo "scale=2; $monthly_cost * 0.25" | bc) (75% reduction)</li>
+                <li>Compute: \$$(echo "scale=2; $monthly_cost * 0.15" | bc) (25% reduction)</li>
+                <li>Network: \$$(echo "scale=2; $monthly_cost * 0.05" | bc) (50% reduction)</li>
+                <li>Total: \$$(echo "scale=2; $monthly_cost * 0.45" | bc) (65% reduction)</li>
+            </ul>
+        </div>
+    </div>
+    
+    <h2>Implementation Roadmap</h2>
+    <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3>Phase 1: Quick Wins (Week 1-2)</h3>
+        <ul>
+            <li>✓ Enable compression on all backups</li>
+            <li>✓ Implement basic storage tiering</li>
+            <li>✓ Review and optimize retention policies</li>
+        </ul>
+        <p><strong>Expected Savings:</strong> 50-60%</p>
+        
+        <h3>Phase 2: Infrastructure Optimization (Week 3-8)</h3>
+        <ul>
+            <li>✓ Enable deduplication</li>
+            <li>✓ Implement full storage tiering</li>
+            <li>✓ Set up automated lifecycle management</li>
+        </ul>
+        <p><strong>Additional Savings:</strong> 15-20%</p>
+        
+        <h3>Phase 3: Strategic Optimization (Month 3-6)</h3>
+        <ul>
+            <li>✓ Multi-cloud backup strategy</li>
+            <li>✓ Implement FinOps framework</li>
+            <li>✓ Continuous cost monitoring</li>
+        </ul>
+        <p><strong>Additional Savings:</strong> 5-10%</p>
+    </div>
+    
+    <script>
+    // Storage Cost Pie Chart
+    const storageCostCtx = document.getElementById('storageCostChart').getContext('2d');
+    new Chart(storageCostCtx, {
+        type: 'pie',
+        data: {
+            labels: ['Hot Storage (SSD)', 'Warm Storage (HDD)', 'Cold Storage (S3)', 'Archive (Glacier)'],
+            datasets: [{
+                data: [30, 40, 20, 10],
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.8)',
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(255, 206, 86, 0.8)',
+                    'rgba(75, 192, 192, 0.8)'
+                ]
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Storage Distribution by Tier'
+                }
+            }
+        }
+    });
+    
+    // Cloud Provider Cost Comparison
+    const cloudCostCtx = document.getElementById('cloudCostChart').getContext('2d');
+    new Chart(cloudCostCtx, {
+        type: 'bar',
+        data: {
+            labels: ['AWS S3 Standard', 'AWS S3 IA', 'AWS Glacier', 'Backblaze B2', 'Wasabi'],
+            datasets: [{
+                label: 'Monthly Cost (\$) for 10TB',
+                data: [230, 125, 40, 50, 59],
+                backgroundColor: 'rgba(102, 126, 234, 0.8)'
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Cloud Provider Cost Comparison (10TB backup)'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Monthly Cost ($)'
+                    }
+                }
+            }
+        }
+    });
+    </script>
+    
+    <hr style="margin-top: 40px;">
+    <p style="text-align: center; color: #666;">
+        Backup Cost Analysis Report v1.0 | Generated: $(date)<br>
+        Recommendations based on industry best practices and current pricing
+    </p>
+</div>
+</body>
+</html>
+HTML
+    
+    log "Cost report generated: $REPORT_FILE"
+    echo "$REPORT_FILE"
+}
+
+# Main execution
+case "${1:-help}" in
+    init)
+        init_analysis
+        ;;
+    
+    storage)
+        init_analysis
+        analyze_storage_costs
+        ;;
+    
+    dedup)
+        init_analysis
+        analyze_deduplication_savings
+        ;;
+    
+    compression)
+        init_analysis
+        benchmark_compression
+        ;;
+    
+    retention)
+        init_analysis
+        calculate_retention_costs
+        ;;
+    
+    cloud)
+        init_analysis
+        analyze_cloud_costs
+        ;;
+    
+    recommendations)
+        init_analysis
+        generate_recommendations
+        ;;
+    
+    report)
+        init_analysis
+        analyze_storage_costs
+        analyze_deduplication_savings
+        benchmark_compression
+        calculate_retention_costs
+        analyze_cloud_costs
+        generate_recommendations
+        generate_cost_report
+        ;;
+    
+    full)
+        init_analysis
+        analyze_storage_costs
+        analyze_deduplication_savings
+        benchmark_compression
+        calculate_retention_costs
+        analyze_cloud_costs
+        generate_recommendations
+        generate_cost_report
+        ;;
+    
+    *)
+        cat <<HELP
+Backup Cost Analysis & Optimization Tool
+Usage: $0 <command>
+Commands:
+init            - Initialize analysis directory
+storage         - Analyze storage costs
+dedup           - Analyze deduplication savings
+compression     - Benchmark compression algorithms
+retention       - Calculate retention policy costs
+cloud           - Analyze cloud provider costs
+recommendations - Generate optimization recommendations
+report          - Generate cost analysis report
+full            - Run complete analysis
+Examples:
+$0 full
+$0 compression
+$0 report
+Report location: $REPORT_FILE
+HELP
+        ;;
+esac
+EOF
+
+chmod +x backup_cost_analyzer.sh
+````
+
+---
+
+## 🎯 Итоговое задание модуля 13
+```bash
+cat > cost_optimization_challenge.sh <<'EOF'
+#!/bin/bash
+
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║   Module 13: Cost Optimization Challenge            ║"
+echo "╚══════════════════════════════════════════════════════╝"
+echo ""
+echo "Scenario: You manage 50TB of backup data costing $1,500/month"
+echo "Goal: Reduce costs by 75% while maintaining RTO/RPO"
+echo ""
+echo "Your Tasks:"
+echo ""
+echo "1. Analyze current costs"
+echo "   ./backup_cost_analyzer.sh storage"
+echo ""
+echo "2. Benchmark compression"
+echo "   ./backup_cost_analyzer.sh compression"
+echo ""
+echo "3. Calculate optimal retention"
+echo "   ./backup_cost_analyzer.sh retention"
+echo ""
+echo "4. Compare cloud providers"
+echo "   ./backup_cost_analyzer.sh cloud"
+echo ""
+echo "5. Generate recommendations"
+echo "   ./backup_cost_analyzer.sh recommendations"
+echo ""
+echo "6. Create final report"
+echo "   ./backup_cost_analyzer.sh report"
+echo ""
+echo "Expected Outcome:"
+echo "  - Identify 75% cost reduction opportunities"
+echo "  - Create actionable implementation plan"
+echo "  - Generate executive summary report"
+echo ""
+echo "Time Limit: 15 minutes"
+echo ""
+read -p "Press Enter to start..."
+
+# Run full analysis
+./backup_cost_analyzer.sh full
+
+echo ""
+echo "╔══════════════════════════════════════════════════════╗"
+echo "║        Challenge Complete!                           ║"
+echo "╚══════════════════════════════════════════════════════╝"
+echo ""
+echo "Review your cost analysis report and recommendations."
+echo "Implement quick wins for immediate savings!"
+EOF
+
+chmod +x cost_optimization_challenge.sh
+```
+
+---
+
+## 📊 Модуль 13 завершен!
+
+**Практические навыки:**
+- 💰 Comprehensive cost analysis
+- 📈 Storage tiering optimization
+- 🗜️ Compression benchmarking
+- 📦 Deduplication strategies
+- ☁️ Multi-cloud cost comparison
+- 📋 ROI calculation
+- 🎯 Optimization roadmap creation
+
+**Ключевые выводы:**
+
+> "Правильная стратегия backup может снизить затраты на 75-85%"
+> "Compression + Deduplication + Tiering = Maximum savings"
+> "FinOps - это не разовая акция, а непрерывный процесс"
+
+**Следующие шаги:**
+1. Проанализируй текущие backup затраты
+2. Реализуй quick wins (compression, tiering)
+3. Внедри долгосрочные оптимизации
+4. Мониторь и оптимизируй непрерывно
+
+**Cost Optimization Checklist:**
+- ✅ Storage tiering implemented
+- ✅ Compression enabled (zstd -10)
+- ✅ Deduplication active
+- ✅ Retention policy optimized
+- ✅ Multi-cloud strategy deployed
+- ✅ Cost monitoring dashboard
+- ✅ Monthly cost reviews scheduled
+
+**Ожидаемая экономия: 75-85% 🎯**
+
+---
+# Модуль 14: Documentation & Runbooks (15 минут)
+
+## 🎯 Напоминалка
+
+### Documentation Hierarchy
+
+```
+Documentation Structure
+├── Strategic Documents
+│   ├── Backup Strategy Overview
+│   ├── DR Policy
+│   ├── RTO/RPO Requirements
+│   └── Compliance Requirements
+│
+├── Operational Runbooks
+│   ├── Daily Operations
+│   ├── Recovery Procedures
+│   ├── Troubleshooting Guides
+│   └── Emergency Contacts
+│
+├── Technical Documentation
+│   ├── System Architecture
+│   ├── Configuration Details
+│   ├── Script Documentation
+│   └── API References
+│
+└── Training Materials
+    ├── User Guides
+    ├── Training Videos
+    ├── FAQ Documents
+    └── Quick Reference Cards
+```
+
+### Runbook Essentials
+
+```
+Effective Runbook Components
+┌─────────────────────────────────────────────┐
+│ 1. CLEAR OBJECTIVE                          │
+│    - What this runbook achieves             │
+│    - When to use it                         │
+└─────────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────────┐
+│ 2. PREREQUISITES                            │
+│    - Required access/permissions            │
+│    - Tools needed                           │
+│    - Dependencies                           │
+└─────────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────────┐
+│ 3. STEP-BY-STEP PROCEDURES                  │
+│    - Numbered steps                         │
+│    - Expected outputs                       │
+│    - Verification points                    │
+└─────────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────────┐
+│ 4. TROUBLESHOOTING                          │
+│    - Common issues                          │
+│    - Solutions                              │
+│    - Escalation criteria                    │
+└─────────────────────────────────────────────┘
+           ↓
+┌─────────────────────────────────────────────┐
+│ 5. VALIDATION                               │
+│    - Success criteria                       │
+│    - Testing procedures                     │
+│    - Rollback steps                         │
+└─────────────────────────────────────────────┘
+```
+
+### Documentation Best Practices
+
+```
+Documentation Quality Checklist
+✓ ACCURATE
+  - Reflects current state
+  - Tested and verified
+  - Version controlled
+
+✓ ACCESSIBLE
+  - Easy to find
+  - Searchable
+  - Available 24/7
+
+✓ ACTIONABLE
+  - Step-by-step instructions
+  - Clear commands
+  - Expected outcomes
+
+✓ MAINTAINED
+  - Regular reviews
+  - Update process
+  - Change tracking
+
+✓ COMPREHENSIVE
+  - Covers all scenarios
+  - Includes edge cases
+  - Has examples
+```
+
+---
+
+## 💻 Задание 1: Automated Documentation Generator
+
+````bash
+cat > documentation_generator.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+DOCS_ROOT="/var/backup-documentation"
+TEMPLATES_DIR="$DOCS_ROOT/templates"
+OUTPUT_DIR="$DOCS_ROOT/generated"
+BACKUP_INVENTORY="$DOCS_ROOT/inventory.yaml"
+RUNBOOKS_DIR="$DOCS_ROOT/runbooks"
+METADATA_FILE="$DOCS_ROOT/.metadata.json"
+
+# Colors
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[1;33m'
+NC='\033[0m'
+
+log() {
+    echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')]${NC} $*"
+}
+
+success() {
+    echo -e "${GREEN}✓${NC} $*"
+}
+
+# Initialize documentation system
+init_documentation() {
+    log "Initializing documentation system..."
+    
+    mkdir -p "$DOCS_ROOT"/{templates,generated,runbooks,training,diagrams}
+    mkdir -p "$OUTPUT_DIR"/{html,markdown,pdf}
+    
+    # Create metadata tracking
+    cat > "$METADATA_FILE" <<JSON
+{
+  "initialized": "$(date -Iseconds)",
+  "version": "1.0.0",
+  "last_generated": null,
+  "documentation_count": 0,
+  "runbooks_count": 0
+}
+JSON
+    
+    success "Documentation system initialized at $DOCS_ROOT"
+}
+
+# Generate backup inventory documentation
+generate_backup_inventory() {
+    log "Generating backup inventory documentation..."
+    
+    local inventory_file="$OUTPUT_DIR/markdown/backup_inventory.md"
+    
+    cat > "$inventory_file" <<'INVENTORY'
+# Backup Inventory
+
+**Generated:** $(date)  
+**Version:** 1.0  
+**Last Updated:** $(date)
+
+---
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [Backup Systems](#backup-systems)
+3. [Databases](#databases)
+4. [Applications](#applications)
+5. [Filesystems](#filesystems)
+6. [Cloud Resources](#cloud-resources)
+7. [Retention Policies](#retention-policies)
+8. [Recovery Procedures](#recovery-procedures)
+
+---
+
+## Overview
+
+### Backup Strategy
+- **Method:** 3-2-1-1-0 Rule
+- **Primary Storage:** Local NAS
+- **Secondary Storage:** S3/Backblaze B2
+- **Offline Copy:** Tape/Immutable Cloud Storage
+- **Air-Gap:** 7-day delay on immutable backups
+
+### Key Metrics
+| Metric | Value | Target |
+|--------|-------|--------|
+| Total Data Backed Up | $(du -sh /backup 2>/dev/null | cut -f1 || echo "N/A") | - |
+| Backup Success Rate | 98.5% | >95% |
+| Average Backup Duration | 2.3 hours | <4 hours |
+| Recovery Time (RTO) | 4 hours | <8 hours |
+| Data Loss Window (RPO) | 4 hours | <6 hours |
+
+---
+
+## Backup Systems
+
+### MySQL Databases
+**Schedule:**
+- Full Backup: Daily at 02:00 UTC
+- Incremental: Every 6 hours
+- Binary Logs: Continuous
+
+**Location:**
+- Local: `/backup/mysql/daily/`
+- Cloud: `s3://company-backups/mysql/`
+
+**Retention:**
+- Daily: 30 days
+- Weekly: 12 weeks
+- Monthly: 12 months
+
+**Recovery Procedure:** See [MySQL Recovery Runbook](#mysql-recovery)
+
+---
+
+### PostgreSQL Databases
+**Schedule:**
+- Base Backup: Daily at 03:00 UTC
+- WAL Archiving: Continuous
+- Point-in-Time Recovery: Enabled
+
+**Location:**
+- Local: `/backup/postgresql/`
+- Cloud: `s3://company-backups/postgresql/`
+
+**Retention:**
+- Base Backups: 14 days
+- WAL Archives: 30 days
+
+**Recovery Procedure:** See [PostgreSQL Recovery Runbook](#postgresql-recovery)
+
+---
+
+### Filesystem Snapshots
+**Schedule:**
+- Snapshots: Every 4 hours
+- Retention: 7 days local, 30 days cloud
+
+**Systems:**
+| Path | Type | Size | Schedule |
+|------|------|------|----------|
+| /data | rsync-snapshot | $(du -sh /data 2>/dev/null | cut -f1 || echo "N/A") | 4h |
+| /var/www | rsync-snapshot | $(du -sh /var/www 2>/dev/null | cut -f1 || echo "N/A") | 6h |
+| /home | rsync-snapshot | $(du -sh /home 2>/dev/null | cut -f1 || echo "N/A") | 12h |
+
+**Recovery Procedure:** See [Filesystem Recovery Runbook](#filesystem-recovery)
+
+---
+
+## Cloud Resources
+
+### AWS S3 Buckets
+**Backup Method:** AWS Backup / Cross-region replication  
+**Schedule:** Continuous  
+**Retention:** 90 days (Glacier after 30 days)
+
+### Backblaze B2
+**Backup Method:** Restic  
+**Schedule:** Daily at 04:00 UTC  
+**Retention:** 60 days
+
+---
+
+## Retention Policies
+
+### Policy Matrix
+| Data Type | Daily | Weekly | Monthly | Yearly |
+|-----------|-------|--------|---------|--------|
+| Databases | 30d | 12w | 12m | 7y |
+| Applications | 30d | 12w | 6m | 3y |
+| Filesystems | 7d | 4w | 6m | - |
+| Logs | 90d | - | - | - |
+
+### Compliance Requirements
+- **Financial Data:** 7 years
+- **Customer Data:** 3 years
+- **System Logs:** 1 year
+- **Audit Logs:** 5 years
+
+---
+
+## Recovery Procedures
+
+### RTO/RPO Matrix
+| System | RTO | RPO | Recovery Priority |
+|--------|-----|-----|-------------------|
+| Production DB | 2h | 15min | P1 - Critical |
+| Application Servers | 4h | 1h | P1 - Critical |
+| File Storage | 8h | 4h | P2 - High |
+| Development Systems | 24h | 24h | P3 - Medium |
+
+### Emergency Contacts
+**On-Call Schedule:** See PagerDuty  
+**Escalation Path:**
+1. On-call engineer (0-30 min)
+2. Team lead (30-60 min)
+3. Director of Engineering (60+ min)
+4. CTO (P1 incidents only)
+
+---
+
+## Verification & Testing
+
+### Backup Verification
+- **Automated Tests:** Daily integrity checks
+- **Manual Tests:** Weekly random restore tests
+- **Full DR Drill:** Quarterly
+
+### Last DR Drill
+- **Date:** $(date -d '30 days ago' +%Y-%m-%d)
+- **Scenario:** Database corruption
+- **Result:** Success (RTO: 3.5h, RPO: 0)
+- **Issues:** None
+- **Report:** [Link to drill report]
+
+---
+
+## Change History
+
+| Date | Version | Changes | Author |
+|------|---------|---------|--------|
+| $(date +%Y-%m-%d) | 1.0 | Initial inventory | Auto-generated |
+
+---
+
+## Related Documents
+- [DR Plan](disaster_recovery_plan.md)
+- [Runbook: MySQL Recovery](runbooks/mysql_recovery.md)
+- [Runbook: PostgreSQL Recovery](runbooks/postgresql_recovery.md)
+- [Runbook: Ransomware Response](runbooks/ransomware_response.md)
+INVENTORY
+    
+    # Process the template
+    eval "echo \"$(cat "$inventory_file")\"" > "$inventory_file.tmp"
+    mv "$inventory_file.tmp" "$inventory_file"
+    
+    success "Backup inventory generated: $inventory_file"
+    echo "$inventory_file"
+}
+
+# Generate MySQL recovery runbook
+generate_mysql_runbook() {
+    log "Generating MySQL recovery runbook..."
+    
+    local runbook_file="$RUNBOOKS_DIR/mysql_recovery.md"
+    
+    cat > "$runbook_file" <<'RUNBOOK'
+# MySQL Database Recovery Runbook
+
+**Document ID:** RB-MYSQL-001  
+**Version:** 2.0  
+**Last Updated:** $(date)  
+**Owner:** Database Team  
+**Review Frequency:** Quarterly
+
+---
+
+## 📋 Quick Reference
+
+| Scenario | Recovery Time | Procedure |
+|----------|---------------|-----------|
+| Single table corruption | 15-30 min | [Section 3.1](#single-table-recovery) |
+| Database corruption | 1-2 hours | [Section 3.2](#database-recovery) |
+| Complete server failure | 2-4 hours | [Section 3.3](#server-recovery) |
+| Point-in-time recovery | 1-3 hours | [Section 3.4](#point-in-time-recovery) |
+
+**Emergency Contact:** oncall-db@company.com  
+**Escalation:** See [On-Call Schedule](https://wiki.company.com/oncall)
+
+---
+
+## 1. Prerequisites
+
+### 1.1 Access Requirements
+- [ ] SSH access to database server
+- [ ] MySQL root credentials (from vault)
+- [ ] Access to backup storage (`/backup/mysql` or S3)
+- [ ] Sudo privileges
+
+### 1.2 Required Tools
+```bash
+# Verify tools are installed
+which mysql mysqldump mysqlbinlog
+ls -l /backup/mysql/daily/
+```
+
+### 1.3 Pre-Recovery Checklist
+
+- [ ] Identify exact failure time
+- [ ] Determine scope (table/database/server)
+- [ ] Verify backup availability
+- [ ] Notify stakeholders
+- [ ] Create incident ticket
+
+---
+
+## 2. Backup Verification
+
+### 2.1 List Available Backups
+
+```bash
+# List recent backups
+ls -lht /backup/mysql/daily/ | head -10
+
+# Check backup integrity
+gunzip -t /backup/mysql/daily/mysql-backup-YYYYMMDD.sql.gz
+```
+
+### 2.2 Identify Clean Backup Point
+
+```bash
+# Find last backup before incident
+INCIDENT_TIME="2024-01-15 14:30:00"
+find /backup/mysql/daily -name "*.sql.gz" -type f | while read backup; do
+    backup_time=$(stat -c %Y "$backup")
+    incident_timestamp=$(date -d "$INCIDENT_TIME" +%s)
+    
+    if [ "$backup_time" -lt "$incident_timestamp" ]; then
+        echo "$(date -d @$backup_time) - $backup"
+    fi
+done | sort | tail -5
+```
+
+### 2.3 Test Backup Accessibility
+
+```bash
+# Verify backup can be read
+BACKUP_FILE="/backup/mysql/daily/mysql-backup-20240115.sql.gz"
+gunzip -c "$BACKUP_FILE" | head -50
+```
+
+---
+
+## 3. Recovery Procedures
+
+### 3.1 Single Table Recovery
+
+**Scenario:** One table is corrupted or accidentally modified/deleted  
+**RTO:** 15-30 minutes  
+**RPO:** Last backup (typically 24 hours)
+
+**Steps:**
+
+1. **Create backup of current state**
+    
+    ```bash
+    mysqldump mydb corrupt_table > /tmp/corrupt_table_$(date +%s).sql
+    ```
+    
+2. **Extract table from backup**
+    
+    ```bash
+    BACKUP_FILE="/backup/mysql/daily/mysql-backup-20240115.sql.gz"
+    gunzip -c "$BACKUP_FILE" | sed -n '/CREATE TABLE `corrupt_table`/,/UNLOCK TABLES/p' > /tmp/restore_table.sql
+    ```
+    
+3. **Drop and restore table**
+    
+    ```bash
+    mysql mydb <<SQL
+    DROP TABLE IF EXISTS corrupt_table;
+    SOURCE /tmp/restore_table.sql;
+    SQL
+    ```
+    
+4. **Verify restoration**
+    
+    ```bash
+    mysql mydb -e "SELECT COUNT(*) FROM corrupt_table"
+    mysql mydb -e "SHOW CREATE TABLE corrupt_table\G"
+    ```
+    
+5. **Apply incremental changes (if needed)**
+    
+    ```bash
+    # Extract changes from binary logs
+    mysqlbinlog --start-datetime="2024-01-15 00:00:00" \
+                --stop-datetime="2024-01-15 14:29:59" \
+                /var/lib/mysql/mysql-bin.000123 | \
+                grep -A 10 "corrupt_table" > /tmp/incremental_changes.sql
+    
+    # Review and apply carefully
+    less /tmp/incremental_changes.sql
+    mysql mydb < /tmp/incremental_changes.sql
+    ```
+    
+
+**Verification:**
+
+- [ ] Row count matches expected
+- [ ] Sample data queries return correct results
+- [ ] Application can read/write to table
+- [ ] No errors in MySQL error log
+
+---
+
+### 3.2 Full Database Recovery
+
+**Scenario:** Entire database is corrupted  
+**RTO:** 1-2 hours  
+**RPO:** Last backup + binary logs
+
+**Steps:**
+
+1. **Stop application connections**
+    
+    ```bash
+    # Block connections to database
+    mysql -e "CREATE USER 'block'@'%'; REVOKE ALL PRIVILEGES ON mydb.* FROM 'appuser'@'%';"
+    
+    # Or stop application servers
+    ansible app-servers -m service -a "name=myapp state=stopped"
+    ```
+    
+2. **Create forensic backup**
+    
+    ```bash
+    mysqldump --all-databases --single-transaction --master-data=2 \
+        > /var/forensics/mysql-corrupt-$(date +%s).sql
+    ```
+    
+3. **Drop corrupted database**
+    
+    ```bash
+    mysql -e "DROP DATABASE mydb;"
+    ```
+    
+4. **Restore from backup**
+    
+    ```bash
+    BACKUP_FILE="/backup/mysql/daily/mysql-backup-20240115.sql.gz"
+    
+    # Extract and restore
+    gunzip -c "$BACKUP_FILE" | mysql
+    
+    # Verify database exists
+    mysql -e "SHOW DATABASES LIKE 'mydb';"
+    ```
+    
+5. **Apply binary logs for PITR**
+    
+    ```bash
+    # Find binary logs to apply
+    RESTORE_START="2024-01-15 00:00:00"  # Backup time
+    RESTORE_END="2024-01-15 14:29:59"    # Just before corruption
+    
+    # Apply each binary log
+    for binlog in /var/lib/mysql/mysql-bin.0001{23..25}; do
+        echo "Applying $binlog..."
+        mysqlbinlog --start-datetime="$RESTORE_START" \
+                    --stop-datetime="$RESTORE_END" \
+                    "$binlog" | mysql mydb
+    done
+    ```
+    
+6. **Verify database integrity**
+    
+    ```bash
+    # Check all tables
+    mysqlcheck --all-databases --check
+    
+    # Verify row counts
+    mysql mydb -e "SELECT table_name, table_rows FROM information_schema.tables WHERE table_schema='mydb';"
+    ```
+    
+7. **Restore application access**
+    
+    ```bash
+    mysql -e "GRANT ALL PRIVILEGES ON mydb.* TO 'appuser'@'%'; DROP USER 'block'@'%';"
+    
+    # Start applications
+    ansible app-servers -m service -a "name=myapp state=started"
+    ```
+    
+
+**Verification:**
+
+- [ ] All tables present and accessible
+- [ ] Row counts match expectations
+- [ ] Sample queries return correct data
+- [ ] Application functionality verified
+- [ ] No errors in MySQL logs
+
+---
+
+### 3.3 Complete Server Recovery
+
+**Scenario:** MySQL server hardware failure or complete data loss  
+**RTO:** 2-4 hours  
+**RPO:** Last backup + available binary logs
+
+**Steps:**
+
+1. **Provision new server**
+    
+    ```bash
+    # Using Terraform/Ansible/manual provisioning
+    # Ensure same MySQL version as backup
+    
+    mysql --version
+    ```
+    
+2. **Install MySQL with same configuration**
+    
+    ```bash
+    # Copy configuration from backup
+    sudo cp /backup/mysql/config/my.cnf /etc/mysql/my.cnf
+    
+    # Verify critical settings
+    grep -E 'datadir|log_bin|server_id' /etc/mysql/my.cnf
+    ```
+    
+3. **Stop MySQL**
+    
+    ```bash
+    sudo systemctl stop mysql
+    ```
+    
+4. **Restore data directory**
+    
+    ```bash
+    # Remove empty data directory
+    sudo rm -rf /var/lib/mysql/*
+    
+    # Restore from backup
+    BACKUP_FILE="/backup/mysql/daily/mysql-backup-20240115.sql.gz"
+    
+    # Initialize MySQL
+    sudo mysqld --initialize-insecure --user=mysql
+    
+    # Start MySQL
+    sudo systemctl start mysql
+    
+    # Load backup
+    gunzip -c "$BACKUP_FILE" | mysql
+    ```
+    
+5. **Configure replication (if applicable)**
+    
+    ```bash
+    # On new slave
+    mysql <<SQL
+    CHANGE MASTER TO
+      MASTER_HOST='master.example.com',
+      MASTER_USER='repl',
+      MASTER_PASSWORD='password',
+      MASTER_LOG_FILE='mysql-bin.000123',
+      MASTER_LOG_POS=4;
+    START SLAVE;
+    SHOW SLAVE STATUS\G
+    SQL
+    ```
+    
+6. **Update DNS/Load Balancer**
+    
+    ```bash
+    # Update DNS to point to new server
+    # Or update load balancer configuration
+    ```
+    
+7. **Full system verification**
+    
+    ```bash
+    # Run comprehensive tests
+    /usr/local/bin/mysql_recovery_tests.sh
+    ```
+    
+
+**Verification:**
+
+- [ ] MySQL service running and stable
+- [ ] All databases present
+- [ ] Replication working (if applicable)
+- [ ] Application connectivity verified
+- [ ] Performance metrics normal
+- [ ] Monitoring alerts cleared
+
+---
+
+### 3.4 Point-in-Time Recovery (PITR)
+
+**Scenario:** Need to restore to specific point in time  
+**Use Case:** Accidental data modification, need to recover to exact moment
+
+**Steps:**
+
+1. **Determine exact recovery point**
+    
+    ```bash
+    # Example: Recover to 5 minutes before incident
+    INCIDENT_TIME="2024-01-15 14:30:00"
+    RECOVERY_TIME=$(date -d "$INCIDENT_TIME - 5 minutes" "+%Y-%m-%d %H:%M:%S")
+    
+    echo "Recovery target: $RECOVERY_TIME"
+    ```
+    
+2. **Find appropriate base backup**
+    
+    ```bash
+    # Find last backup before recovery point
+    RECOVERY_TIMESTAMP=$(date -d "$RECOVERY_TIME" +%s)
+    
+    BEST_BACKUP=$(find /backup/mysql/daily -name "*.sql.gz" -type f | while read backup; do
+        backup_time=$(stat -c %Y "$backup")
+        if [ "$backup_time" -lt "$RECOVERY_TIMESTAMP" ]; then
+            echo "$backup_time $backup"
+        fi
+    done | sort -n | tail -1 | cut -d' ' -f2)
+    
+    echo "Using backup: $BEST_BACKUP"
+    ```
+    
+3. **Restore base backup**
+    
+    ```bash
+    mysql -e "DROP DATABASE IF EXISTS mydb_pitr;"
+    mysql -e "CREATE DATABASE mydb_pitr;"
+    
+    gunzip -c "$BEST_BACKUP" | mysql mydb_pitr
+    ```
+    
+4. **Apply binary logs up to recovery point**
+    
+    ```bash
+    # Get backup completion time
+    BACKUP_TIME=$(stat -c %Y "$BEST_BACKUP")
+    BACKUP_DATETIME=$(date -d @$BACKUP_TIME "+%Y-%m-%d %H:%M:%S")
+    
+    # Apply binary logs
+    for binlog in /var/lib/mysql/mysql-bin.*; do
+        echo "Processing $binlog..."
+        
+        mysqlbinlog --start-datetime="$BACKUP_DATETIME" \
+                    --stop-datetime="$RECOVERY_TIME" \
+                    "$binlog" | mysql mydb_pitr
+    done
+    ```
+    
+5. **Verify recovered data**
+    
+    ```bash
+    # Check critical tables
+    mysql mydb_pitr -e "SELECT COUNT(*) FROM critical_table"
+    
+    # Sample data validation
+    mysql mydb_pitr -e "SELECT * FROM orders WHERE created_at <= '$RECOVERY_TIME' ORDER BY created_at DESC LIMIT 10"
+    ```
+    
+6. **Promote recovered database**
+    
+    ```bash
+    # Backup current (corrupted) database
+    mysqldump mydb > /tmp/mydb_corrupted_$(date +%s).sql
+    
+    # Swap databases
+    mysql <<SQL
+    DROP DATABASE mydb;
+    RENAME TABLE mydb_pitr TO mydb;
+    SQL
+    ```
+    
+
+**Verification:**
+
+- [ ] Data state matches recovery point
+- [ ] No data after recovery point exists
+- [ ] Application queries work correctly
+- [ ] Transaction consistency maintained
+
+---
+
+## 4. Post-Recovery Actions
+
+### 4.1 Immediate Actions
+
+1. **Notify stakeholders**
+    
+    ```bash
+    # Send notification
+    echo "MySQL recovery completed successfully. RTO: Xh, RPO: Yh" | \
+        mail -s "DB Recovery Complete" stakeholders@company.com
+    ```
+    
+2. **Update incident ticket**
+    
+    - Document recovery steps taken
+    - Record actual RTO/RPO achieved
+    - Note any issues encountered
+3. **Monitor for issues**
+    
+    ```bash
+    # Watch MySQL error log
+    tail -f /var/log/mysql/error.log
+    
+    # Monitor query performance
+    mysql -e "SHOW PROCESSLIST"
+    ```
+    
+
+### 4.2 Documentation
+
+- [ ] Update incident timeline
+- [ ] Document root cause (if known)
+- [ ] Record lessons learned
+- [ ] Update runbook if new issues discovered
+
+### 4.3 Follow-up Actions
+
+- [ ] Schedule post-incident review (within 48h)
+- [ ] Verify backup integrity
+- [ ] Test restored data with application team
+- [ ] Update monitoring/alerting if needed
+- [ ] Plan preventive measures
+
+---
+
+## 5. Troubleshooting
+
+### Common Issues
+
+**Issue: Binary log not found**
+
+```bash
+# Symptoms: "ERROR 1236: Could not find log file"
+
+# Solution: Check binary log availability
+ls -l /var/lib/mysql/mysql-bin.*
+
+# If logs rotated/deleted, recovery limited to last full backup
+# Document data loss and communicate to stakeholders
+```
+
+**Issue: Inconsistent replication**
+
+```bash
+# Symptoms: SHOW SLAVE STATUS shows errors
+
+# Solution: Rebuild slave from current master
+mysqldump --all-databases --master-data=2 --single-transaction | mysql -h slave
+```
+
+**Issue: Out of disk space during restore**
+
+```bash
+# Symptoms: "ERROR 1021: Disk full"
+
+# Solution: Free up space
+df -h
+sudo rm -rf /var/log/mysql/mysql-slow.log.*
+sudo find /tmp -mtime +7 -delete
+```
+
+**Issue: Incorrect table structure after restore**
+
+```bash
+# Symptoms: Application errors, column mismatches
+
+# Solution: Verify backup file includes table structure
+gunzip -c "$BACKUP_FILE" | grep -A 5 "CREATE TABLE problematic_table"
+
+# If missing, check alternative backups or rebuild from schema
+```
+
+---
+
+## 6. Escalation
+
+### When to Escalate
+
+|Scenario|Escalate To|Timeframe|
+|---|---|---|
+|Cannot find clean backup|Team Lead|Immediately|
+|Recovery exceeding RTO|Director|After 50% RTO consumed|
+|Data loss > RPO|CTO|Immediately|
+|Repeated failures|Security Team|After 2nd failure|
+
+### Escalation Contacts
+
+- **Team Lead:** lead-db@company.com / +1-555-0101
+- **Director of Engineering:** director@company.com / +1-555-0102
+- **CTO:** cto@company.com / +1-555-0103
+- **Security Team:** security@company.com
+
+---
+
+## 7. Testing & Validation
+
+### Regular Testing Schedule
+
+- **Weekly:** Random table restore test
+- **Monthly:** Full database restore test
+- **Quarterly:** Complete DR drill
+
+### Last Test Results
+
+|Date|Test Type|Duration|Result|Issues|
+|---|---|---|---|---|
+|2024-01-08|Single table|22 min|✓ Pass|None|
+|2024-01-01|Full database|1.8h|✓ Pass|Binlog gap warning|
+|2023-12-15|PITR|2.1h|✓ Pass|None|
+
+---
+
+## 8. Related Documents
+
+- [Backup Inventory](https://claude.ai/backup_inventory.md)
+- [DR Plan](https://claude.ai/disaster_recovery_plan.md)
+- [MySQL Monitoring Guide](https://claude.ai/chat/mysql_monitoring.md)
+- [Replication Failover Runbook](https://claude.ai/chat/mysql_replication_failover.md)
+
+---
+
+## 9. Change History
+
+|Date|Version|Changes|Author|
+|---|---|---|---|
+|2024-01-15|2.0|Added PITR section, updated troubleshooting|Auto-generated|
+|2023-12-01|1.5|Updated backup locations|DBA Team|
+|2023-09-15|1.0|Initial runbook|DBA Team|
+
+---
+
+**Next Review Date:** $(date -d '+3 months' +%Y-%m-%d) RUNBOOK
+
+```
+# Process template
+eval "echo \"$(cat "$runbook_file")\"" > "$runbook_file.tmp"
+mv "$runbook_file.tmp" "$runbook_file"
+
+success "MySQL recovery runbook generated: $runbook_file"
+echo "$runbook_file"
+```
+
+}
+
+# Generate disaster recovery plan
+
+generate_dr_plan() { log "Generating disaster recovery plan..."
+
+```
+local dr_plan_file="$OUTPUT_DIR/markdown/disaster_recovery_plan.md"
+
+cat > "$dr_plan_file" <<'DRPLAN'
+```
+
+# Disaster Recovery Plan
+
+**Document Classification:** Confidential  
+**Version:** 3.0  
+**Effective Date:** $(date +%Y-%m-%d)  
+**Review Cycle:** Quarterly  
+**Owner:** Infrastructure Team
+
+---
+
+## Executive Summary
+
+This Disaster Recovery (DR) Plan outlines procedures for recovering critical IT systems and data in the event of a disaster. The plan covers:
+
+- **Scope:** All production systems and data
+- **RTO Target:** 4 hours for critical systems
+- **RPO Target:** 4 hours data loss maximum
+- **DR Site:** AWS us-west-2 (secondary region)
+- **Last Tested:** $(date -d '30 days ago' +%Y-%m-%d)
+- **Test Result:** Successful (RTO: 3.2h, RPO: 2.1h)
+
+---
+
+## 1. Disaster Scenarios
+
+### 1.1 Scenario Classification
+
+|Severity|Description|Response|
+|---|---|---|
+|**P1 - Critical**|Complete datacenter failure, ransomware|Immediate DR activation|
+|**P2 - High**|Multiple system failures, data corruption|Expedited recovery|
+|**P3 - Medium**|Single system failure|Standard recovery|
+|**P4 - Low**|Minor issues, degraded performance|Routine troubleshooting|
+
+### 1.2 Common Disaster Types
+
+#### Technical Disasters
+
+- Hardware failures (servers, storage, network)
+- Software failures (corruption, bugs)
+- Infrastructure failures (power, cooling, connectivity)
+
+#### Security Disasters
+
+- Ransomware attacks
+- Data breaches
+- Malware infections
+- Unauthorized access
+
+#### Human Disasters
+
+- Accidental deletions
+- Configuration errors
+- Deployment mistakes
+
+#### Natural Disasters
+
+- Fire, flood, earthquake
+- Severe weather
+- Power grid failures
+
+---
+
+## 2. Recovery Time & Point Objectives
+
+### 2.1 RTO/RPO Matrix
+
+|System/Service|Classification|RTO|RPO|Recovery Priority|
+|---|---|---|---|---|
+|Production Database|Critical|2h|15min|P1|
+|API Services|Critical|2h|1h|P1|
+|Web Application|Critical|4h|1h|P1|
+|File Storage|High|8h|4h|P2|
+|Analytics Platform|Medium|24h|12h|P3|
+|Development Systems|Low|72h|24h|P4|
+
+### 2.2 Business Impact Analysis
+
+**Critical Systems** (P1):
+
+- Revenue Impact: >$10K/hour downtime
+- Customer Impact: Complete service outage
+- Compliance Impact: Regulatory reporting affected
+
+**High Priority** (P2):
+
+- Revenue Impact: $1-10K/hour
+- Customer Impact: Degraded service
+- Compliance Impact: Delayed reporting
+
+---
+
+## 3. DR Team & Responsibilities
+
+### 3.1 DR Team Structure
+
+#### DR Commander
+
+- **Role:** Overall coordination and decision-making
+- **Primary:** Director of Engineering
+- **Backup:** VP of Technology
+- **Contact:** See emergency contact list
+
+#### Technical Lead
+
+- **Role:** Technical recovery execution
+- **Primary:** Senior SRE
+- **Backup:** Lead DevOps Engineer
+
+#### Communications Lead
+
+- **Role:** Stakeholder communication
+- **Primary:** Product Manager
+- **Backup:** Customer Success Manager
+
+#### Security Lead
+
+- **Role:** Security assessment and compliance
+- **Primary:** CISO
+- **Backup:** Senior Security Engineer
+
+### 3.2 Responsibilities Matrix
+
+|Role|Activate DR|Execute Recovery|Communicate|Validate|Document|
+|---|---|---|---|---|---|
+|DR Commander|✓|-|✓|✓|✓|
+|Technical Lead|-|✓|-|✓|✓|
+|Communications|-|-|✓|-|-|
+|Security Lead|-|✓|-|✓|✓|
+|Team Members|-|✓|-|✓|-|
+
+## 4. DR Activation Procedures
+
+### 4.1 Decision Criteria
+
+**Automatic Activation:**
+
+- Complete datacenter failure
+- Ransomware confirmed
+- 3+ critical system failures
+
+**Manual Assessment Required:**
+
+- Partial system failures
+- Suspected security incidents
+- Natural disaster warnings
+
+### 4.2 Activation Process
+
+**Step 1: Initial Assessment (0-15 min)**
+
+bash
+
+```bash
+# On-call engineer assesses situation
+# Checklist:
+- [ ] Confirm scope of outage
+- [ ] Estimate recovery time without DR
+- [ ] Check backup availability
+- [ ] Assess security implications
+```
+
+**Step 2: DR Commander Notification (15-30 min)**
+
+bash
+
+```bash
+# Notify DR Commander
+# Decision: Activate DR or continue troubleshooting?
+```
+
+**Step 3: DR Team Assembly (30-60 min)**
+
+bash
+
+```bash
+# Page DR team members
+# Schedule:
+- Technical Lead: Immediate
+- Security Lead: Within 30 min
+- Communications Lead: Within 1 hour
+- Additional engineers: As needed
+```
+
+**Step 4: Stakeholder Notification (within 1 hour)**
+
+bash
+
+```bash
+# Notify (in order):
+1. Executive team
+2. Key customers
+3. All employees
+4. Public (if needed)
+```
+
+---
+
+## 5. Recovery Procedures
+
+### 5.1 Phase 1: Assessment & Containment (0-1 hour)
+
+**Objectives:**
+
+- Understand full scope of disaster
+- Contain any active threats
+- Preserve evidence for forensics
+
+**Actions:**
+
+bash
+
+```bash
+# 1. Isolate affected systems
+sudo iptables -A INPUT -j DROP
+sudo iptables -A OUTPUT -j DROP
+
+# 2. Document current state
+./disaster_assessment.sh > /var/incidents/$(date +%s)/assessment.txt
+
+# 3. Identify clean backup points
+./identify_clean_backup.sh
+
+# 4. Notify security team if needed
+```
+
+### 5.2 Phase 2: DR Environment Preparation (1-2 hours)
+
+**Objectives:**
+
+- Prepare DR site for cutover
+- Verify DR resources available
+- Update DNS/routing as needed
+
+**Actions:**
+
+bash
+
+```bash
+# 1. Validate DR infrastructure
+ansible-playbook dr-validation.yml
+
+# 2. Prepare DR databases
+./prepare_dr_databases.sh
+
+# 3. Stage recovery resources
+./stage_dr_resources.sh
+
+# 4. Update configuration
+./update_dr_config.sh
+```
+
+### 5.3 Phase 3: Data Recovery (2-4 hours)
+
+**Objectives:**
+
+- Restore data from backups
+- Verify data integrity
+- Achieve RPO targets
+
+**Actions:**
+
+bash
+
+```bash
+# 1. Restore databases
+./restore_databases.sh --target-time "$RECOVERY_POINT"
+
+# 2. Restore application data
+./restore_application_data.sh
+
+# 3. Restore filesystems
+./restore_filesystems.sh
+
+# 4. Verify data integrity
+./verify_data_integrity.sh
+```
+
+### 5.4 Phase 4: Service Restoration (4-6 hours)
+
+**Objectives:**
+
+- Restore services in DR environment
+- Validate functionality
+- Achieve RTO targets
+
+**Actions:**
+
+bash
+
+```bash
+# 1. Start core services
+ansible-playbook start-core-services.yml
+
+# 2. Run smoke tests
+./smoke_tests.sh
+
+# 3. Progressive traffic cutover
+./progressive_cutover.sh --percentage 10  # Start with 10%
+
+# 4. Monitor for issues
+./monitor_dr_health.sh
+```
+
+### 5.5 Phase 5: Validation & Monitoring (6-8 hours)
+
+**Objectives:**
+
+- Confirm full functionality
+- Monitor for issues
+- Clear stakeholders for go-live
+
+**Actions:**
+
+bash
+
+````bash
+# 1. Run full test suite
+./full_test_suite.sh
+
+# 2. Validate business workflows
+./validate_business_workflows.sh
+
+# 3. Confirm RTO/RPO achieved
+./calculate_rto_rpo.sh
+
+# 4. Stakeholder approval
+# Get go/no-go from DR Commander
+```
+
+---
+
+## 6. Communication Plan
+
+### 6.1 Internal Communications
+
+**Immediate (Within 30 min):**
+- DR Team via PagerDuty/Slack
+- Executive team via phone/email
+
+**Hourly Updates:**
+- All employees via Slack #incidents channel
+- Status page updates
+
+**Post-Recovery:**
+- All-hands debrief within 48 hours
+- Written incident report within 1 week
+
+### 6.2 External Communications
+
+**Customer Notification:**
+```
+Template: DR Activation Notice
+
+Subject: [URGENT] Service Disruption - DR Activated
+
+Dear Valued Customer,
+
+We are experiencing a service disruption and have activated our 
+disaster recovery procedures. Our team is working to restore full 
+service.
+
+Current Status: [brief description]
+Expected Resolution: [estimated time]
+Your Action Required: [if any]
+
+We will provide hourly updates at [status page URL].
+
+For urgent issues, contact: [emergency contact]
+
+We apologize for the inconvenience.
+
+[Company] DR Team
+```
+
+### 6.3 Communication Schedule
+
+|Audience|Initial|Updates|Resolution|
+|---|---|---|---|
+|DR Team|Immediate|Every 15 min|Immediate|
+|Executives|15 min|Every 30 min|Immediate|
+|Employees|30 min|Every hour|Within 2h|
+|Customers|1 hour|Every hour|Within 4h|
+|Public|As needed|Daily|Post-recovery|
+
+## 7. Fallback Procedures
+
+### 7.1 When to Fallback
+
+**Criteria for abandoning DR:**
+
+- DR recovery taking longer than fixing primary
+- DR environment has critical issues
+- Data integrity concerns
+- Security vulnerabilities in DR
+
+### 7.2 Fallback Steps
+
+1. **Assess Situation**
+    - Calculate remaining time to fix primary
+    - Compare to DR recovery time
+    - Get DR Commander approval
+2. **Controlled Rollback**
+
+bash
+
+````bash
+   # Stop DR services
+   ansible-playbook stop-dr-services.yml
+   
+   # Preserve any DR data
+   ./backup_dr_state.sh
+   
+   # Revert DNS/routing
+   ./revert_to_primary.sh
+```
+
+3. **Resume Primary Recovery**
+   - Continue troubleshooting primary issue
+   - Use standard recovery procedures
+   - Update stakeholders
+
+---
+
+## 8. Post-Recovery Actions
+
+### 8.1 Immediate Actions (0-24 hours)
+
+- [ ] Deactivate DR environment (or keep warm standby)
+- [ ] Update incident documentation
+- [ ] Notify all stakeholders of resolution
+- [ ] Begin forensic analysis (if security incident)
+- [ ] Review logs and metrics
+- [ ] Identify root cause
+
+### 8.2 Short-term Actions (1-7 days)
+
+- [ ] Conduct post-incident review meeting
+- [ ] Document lessons learned
+- [ ] Update DR procedures based on findings
+- [ ] Test backup integrity
+- [ ] Verify monitoring and alerting
+- [ ] Submit incident report
+
+### 8.3 Long-term Actions (1-3 months)
+
+- [ ] Implement preventive measures
+- [ ] Update DR plan based on lessons learned
+- [ ] Schedule additional DR drills
+- [ ] Review and update RTO/RPO targets
+- [ ] Train team on improvements
+- [ ] Audit DR readiness
+
+---
+
+## 9. DR Testing Schedule
+
+### 9.1 Test Types
+
+**Tabletop Exercise** (Monthly):
+- Walkthrough of DR procedures
+- Team discussion of scenarios
+- Duration: 2 hours
+- Next test: $(date -d 'next month' +%Y-%m-%d)
+
+**Partial DR Test** (Quarterly):
+- Restore single critical system
+- Validate recovery procedures
+- Duration: 4 hours
+- Next test: $(date -d '+3 months' +%Y-%m-%d)
+
+**Full DR Drill** (Semi-annually):
+- Complete DR activation
+- All systems recovered
+- Duration: 8+ hours
+- Next test: $(date -d '+6 months' +%Y-%m-%d)
+
+### 9.2 Test Success Criteria
+
+- [ ] RTO targets achieved for all P1 systems
+- [ ] RPO targets achieved
+- [ ] All runbooks executed successfully
+- [ ] Communication plan followed
+- [ ] Data integrity verified
+- [ ] No critical issues discovered
+
+### 9.3 Last Test Results
+
+**Date:** $(date -d '30 days ago' +%Y-%m-%d)  
+**Type:** Partial DR Test  
+**Scenario:** Database corruption  
+**Duration:** 3.2 hours  
+**Result:** ✓ Success
+
+**Key Metrics:**
+- RTO Achieved: 3.2h (target: 4h) ✓
+- RPO Achieved: 2.1h (target: 4h) ✓
+- Data Loss: 0% ✓
+- Issues Found: 2 minor
+
+**Issues Identified:**
+1. Backup verification script timeout - FIXED
+2. Monitoring alert delay - FIXED
+
+---
+
+## 10. Appendices
+
+### Appendix A: Emergency Contacts
+
+| Role | Name | Primary Phone | Secondary | Email |
+|------|------|---------------|-----------|-------|
+| DR Commander | [Name] | +1-555-0101 | +1-555-0102 | dr-cmd@company.com |
+| Technical Lead | [Name] | +1-555-0201 | +1-555-0202 | tech-lead@company.com |
+| Security Lead | [Name] | +1-555-0301 | +1-555-0302 | security@company.com |
+| Communications | [Name] | +1-555-0401 | +1-555-0402 | comms@company.com |
+
+**On-Call Schedule:** https://company.pagerduty.com
+
+### Appendix B: System Dependencies
+```
+Critical System Dependencies Map
+┌─────────────────────────┐
+│   Load Balancer         │
+└───────────┬─────────────┘
+            │
+    ┌───────┴────────┐
+    │                │
+┌───▼────┐    ┌─────▼───┐
+│ API    │    │ Web App │
+│ Servers│    │ Servers │
+└───┬────┘    └─────┬───┘
+    │               │
+    └───────┬───────┘
+            │
+    ┌───────▼────────┐
+    │   Database     │
+    │   Cluster      │
+    └────────────────┘
+```
+
+### Appendix C: Backup Locations
+
+| System | Primary Backup | Secondary Backup | Tertiary Backup |
+|--------|---------------|------------------|-----------------|
+| Databases | /backup/mysql | s3://backups-us-east | s3://backups-us-west |
+| Applications | /backup/apps | s3://backups-us-east | Backblaze B2 |
+| Filesystems | /backup/files | s3://backups-us-east | Tape (monthly) |
+
+### Appendix D: Related Documents
+
+- [Backup Inventory](backup_inventory.md)
+- [MySQL Recovery Runbook](runbooks/mysql_recovery.md)
+- [PostgreSQL Recovery Runbook](runbooks/postgresql_recovery.md)
+- [Ransomware Response Runbook](runbooks/ransomware_response.md)
+- [Network Failover Runbook](runbooks/network_failover.md)
+
+### Appendix E: Vendor Contacts
+
+| Vendor | Service | Support Phone | Portal |
+|--------|---------|---------------|--------|
+| AWS | Cloud Infrastructure | +1-800-xxx-xxxx | aws.amazon.com/support |
+| Backblaze | Cloud Backup | +1-650-xxx-xxxx | backblaze.com/support |
+| Datadog | Monitoring | +1-866-xxx-xxxx | docs.datadoghq.com |
+
+---
+
+## Document Control
+
+**Approval:**
+- DR Commander: _______________ Date: _______
+- CTO: _______________ Date: _______
+- CISO: _______________ Date: _______
+
+**Distribution:**
+- All DR Team Members (mandatory)
+- All Engineering Staff (recommended)
+- Executive Team (mandatory)
+- Legal/Compliance (mandatory)
+
+**Next Review Date:** $(date -d '+3 months' +%Y-%m-%d)
+
+**Change History:**
+
+| Version | Date | Changes | Author |
+|---------|------|---------|--------|
+| 3.0 | $(date +%Y-%m-%d) | Comprehensive update | Auto-generated |
+| 2.5 | 2023-10-01 | Added ransomware procedures | DR Team |
+| 2.0 | 2023-07-01 | Cloud DR procedures | DR Team |
+| 1.0 | 2023-01-01 | Initial DR plan | DR Team |
+DRPLAN
+    
+    # Process template
+    eval "echo \"$(cat "$dr_plan_file")\"" > "$dr_plan_file.tmp"
+    mv "$dr_plan_file.tmp" "$dr_plan_file"
+    
+    success "Disaster recovery plan generated: $dr_plan_file"
+    echo "$dr_plan_file"
+}
+
+# Generate all documentation
+generate_all_docs() {
+    log "Generating all documentation..."
+    
+    generate_backup_inventory
+    generate_mysql_runbook
+    generate_dr_plan
+    
+    # Generate additional runbooks (examples)
+    generate_postgresql_runbook
+    generate_ransomware_runbook
+    generate_network_failover_runbook
+    
+    success "All documentation generated"
+}
+
+# Stub functions for additional runbooks
+generate_postgresql_runbook() {
+    log "Generating PostgreSQL recovery runbook..."
+    touch "$RUNBOOKS_DIR/postgresql_recovery.md"
+    success "PostgreSQL runbook generated"
+}
+
+generate_ransomware_runbook() {
+    log "Generating ransomware response runbook..."
+    touch "$RUNBOOKS_DIR/ransomware_response.md"
+    success "Ransomware runbook generated"
+}
+
+generate_network_failover_runbook() {
+    log "Generating network failover runbook..."
+    touch "$RUNBOOKS_DIR/network_failover.md"
+    success "Network failover runbook generated"
+}
+
+# Convert markdown to HTML
+convert_to_html() {
+    log "Converting documentation to HTML..."
+    
+    # Requires pandoc
+    if ! command -v pandoc &>/dev/null; then
+        log "Installing pandoc..."
+        apt-get update -qq
+        apt-get install -y pandoc
+    fi
+    
+    for md_file in "$OUTPUT_DIR/markdown"/*.md "$RUNBOOKS_DIR"/*.md; do
+        if [ ! -f "$md_file" ]; then
+            continue
+        fi
+        
+        local base_name=$(basename "$md_file" .md)
+        local html_file="$OUTPUT_DIR/html/${base_name}.html"
+        
+        pandoc "$md_file" -f markdown -t html5 \
+            --standalone \
+            --css=/docs/style.css \
+            --metadata title="$base_name" \
+            -o "$html_file"
+        
+        success "Converted: $base_name.md → $base_name.html"
+    done
+}
+
+# Generate documentation index
+generate_index() {
+    log "Generating documentation index..."
+    
+    local index_file="$OUTPUT_DIR/html/index.html"
+    
+    cat > "$index_file" <<'INDEX'
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Backup & Recovery Documentation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .doc-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        .doc-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .doc-card h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+        .doc-card a {
+            color: #764ba2;
+            text-decoration: none;
+        }
+        .doc-card a:hover {
+            text-decoration: underline;
+        }
+        .tag {
+            display: inline-block;
+            padding: 5px 10px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            font-size: 0.8em;
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📚 Backup & Recovery Documentation</h1>
+        <p>Comprehensive documentation for backup operations and disaster recovery</p>
+        <p><strong>Last Updated:</strong> $(date)</p>
+    </div>
+    
+    <div class="doc-grid">
+        <div class="doc-card">
+            <h3>📋 Backup Inventory</h3>
+            <p>Complete inventory of all backup systems, schedules, and retention policies</p>
+            <a href="backup_inventory.html">View Document →</a>
+            <br><br>
+            <span class="tag">Reference</span>
+            <span class="tag">Updated Daily</span>
+        </div>
+        
+        <div class="doc-card">
+            <h3>🚨 Disaster Recovery Plan</h3>
+            <p>Comprehensive plan for recovering from disasters including procedures and contacts</p>
+            <a href="disaster_recovery_plan.html">View Document →</a>
+            <br><br>
+            <span class="tag">Critical</span>
+            <span class="tag">Quarterly Review</span>
+        </div>
+        
+        <div class="doc-card">
+            <h3>🔧 MySQL Recovery Runbook</h3>
+            <p>Step-by-step procedures for MySQL database recovery scenarios</p>
+            <a href="../runbooks/mysql_recovery.html">View Runbook →</a>
+            <br><br>
+            <span class="tag">Runbook</span>
+            <span class="tag">P1 Critical</span>
+        </div>
+        
+        <div class="doc-card">
+            <h3>🐘 PostgreSQL Recovery Runbook</h3>
+            <p>PostgreSQL-specific recovery procedures including PITR</p>
+            <a href="../runbooks/postgresql_recovery.html">View Runbook →</a>
+            <br><br>
+            <span class="tag">Runbook</span>
+            <span class="tag">P1 Critical</span>
+        </div>
+        
+        <div class="doc-card">
+            <h3>🛡️ Ransomware Response Runbook</h3>
+            <p>Incident response procedures for ransomware attacks</p>
+            <a href="../runbooks/ransomware_response.html">View Runbook →</a>
+            <br><br>
+            <span class="tag">Runbook</span>
+            <span class="tag">Security</span>
+        </div>
+        
+        <div class="doc-card">
+            <h3>🌐 Network Failover Runbook</h3>
+            <p>Procedures for network failover and traffic rerouting</p>
+            <a href="../runbooks/network_failover.html">View Runbook →</a>
+            <br><br>
+            <span class="tag">Runbook</span>
+            <span class="tag">P2 High</span>
+        </div>
+    </div>
+    
+    <div style="margin-top: 40px; padding: 20px; background: white; border-radius: 8px;">
+        <h2>📞 Emergency Contacts</h2>
+        <ul>
+            <li><strong>On-Call Engineer:</strong> See PagerDuty rotation</li>
+            <li><strong>DR Commander:</strong> director@company.com / +1-555-0101</li>
+            <li><strong>Security Team:</strong> security@company.com</li>
+        </ul>
+    </div>
+    
+    <div style="margin-top: 20px; text-align: center; color: #666;">
+        <p>Documentation generated: $(date)</p>
+        <p>For questions or updates, contact: devops@company.com</p>
+    </div>
+</body>
+</html>
+INDEX
+    
+    success "Documentation index generated: $index_file"
+    echo "$index_file"
+}
+
+# Validate documentation
+validate_docs() {
+    log "Validating documentation..."
+    
+    local issues=0
+    
+    # Check for broken links
+    log "Checking for broken links..."
+    
+    for html_file in "$OUTPUT_DIR/html"/*.html; do
+        if [ ! -f "$html_file" ]; then
+            continue
+        fi
+        
+        # Extract links
+        grep -o 'href="[^"]*"' "$html_file" | sed 's/href="//;s/"$//' | while read link; do
+            # Skip external links
+            if [[ "$link" =~ ^http ]]; then
+                continue
+            fi
+            
+            # Check if linked file exists
+            local target_file="$OUTPUT_DIR/html/$link"
+            if [ ! -f "$target_file" ]; then
+                log "WARNING: Broken link in $(basename "$html_file"): $link"
+                issues=$((issues + 1))
+            fi
+        done
+    done
+    
+    # Check for outdated content
+    log "Checking for outdated content..."
+    
+    local cutoff_date=$(date -d '6 months ago' +%s)
+    
+    for md_file in "$OUTPUT_DIR/markdown"/*.md "$RUNBOOKS_DIR"/*.md; do
+        if [ ! -f "$md_file" ]; then
+            continue
+        fi
+        
+        local mod_time=$(stat -c %Y "$md_file")
+        
+        if [ "$mod_time" -lt "$cutoff_date" ]; then
+            log "WARNING: Document may be outdated: $(basename "$md_file")"
+            log "  Last modified: $(date -d @$mod_time)"
+            issues=$((issues + 1))
+        fi
+    done
+    
+    if [ "$issues" -eq 0 ]; then
+        success "Documentation validation passed"
+    else
+        log "WARNING: Found $issues potential issues"
+    fi
+}
+
+# Main execution
+case "${1:-help}" in
+    init)
+        init_documentation
+        ;;
+    
+    generate-inventory)
+        generate_backup_inventory
+        ;;
+    
+    generate-mysql-runbook)
+        generate_mysql_runbook
+        ;;
+    
+    generate-dr-plan)
+        generate_dr_plan
+        ;;
+    
+    generate-all)
+        generate_all_docs
+        convert_to_html
+        generate_index
+        ;;
+    
+    convert-html)
+        convert_to_html
+        ;;
+    
+    index)
+        generate_index
+        ;;
+    
+    validate)
+        validate_docs
+        ;;
+    
+    *)
+        cat <<HELP
+Documentation Generator
+
+Usage: $0 <command>
+
+Commands:
+  init                      - Initialize documentation system
+  generate-inventory        - Generate backup inventory
+  generate-mysql-runbook    - Generate MySQL recovery runbook
+  generate-dr-plan          - Generate disaster recovery plan
+  generate-all              - Generate all documentation
+  convert-html              - Convert markdown to HTML
+  index                     - Generate documentation index
+  validate                  - Validate documentation
+
+Examples:
+  $0 init
+  $0 generate-all
+  $0 validate
+
+Output: $OUTPUT_DIR/html/index.html
+HELP
+        ;;
+esac
+EOF
+
+chmod +x documentation_generator.sh
+
+````
+
+---
+
+## 🎓 Итоговое задание модуля 14
+```bash
+cat > complete_documentation_setup.sh <<'COMPLETE'
+#!/bin/bash
+
+echo "=============================================="
+echo "Module 14: Complete Documentation Setup"
+echo "=============================================="
+
+# 1. Initialize documentation system
+echo ""
+echo "1. Initializing documentation system..."
+./documentation_generator.sh init
+
+# 2. Generate all documentation
+echo ""
+echo "2. Generating all documentation..."
+./documentation_generator.sh generate-all
+
+# 3. Validate documentation
+echo ""
+echo "3. Validating documentation..."
+./documentation_generator.sh validate
+
+echo ""
+echo "=============================================="
+echo "Documentation Setup Complete!"
+echo "=============================================="
+echo ""
+echo "Documentation Location:"
+echo "  Root: /var/backup-documentation"
+echo "  HTML: /var/backup-documentation/generated/html/index.html"
+echo "  Markdown: /var/backup-documentation/generated/markdown/"
+echo "  Runbooks: /var/backup-documentation/runbooks/"
+echo ""
+echo "View documentation:"
+echo "  firefox /var/backup-documentation/generated/html/index.html"
+echo ""
+echo "Update documentation:"
+echo "  ./documentation_generator.sh generate-all"
+echo ""
+COMPLETE
+
+chmod +x complete_documentation_setup.sh
+```
+
+---
+
+## 📊 Финальный чеклист документации
+```bash
+cat > documentation_checklist.sh <<'CHECKLIST'
+#!/bin/bash
+
+echo "📋 Documentation Completeness Checklist"
+echo "========================================"
+echo ""
+
+check_item() {
+    local item="$1"
+    local file="$2"
+    
+    if [ -f "$file" ]; then
+        echo "✓ $item"
+    else
+        echo "✗ $item (MISSING)"
+    fi
+}
+
+# Strategic Documents
+echo "Strategic Documents:"
+check_item "Backup Strategy Overview" "/var/backup-documentation/generated/markdown/backup_inventory.md"
+check_item "Disaster Recovery Plan" "/var/backup-documentation/generated/markdown/disaster_recovery_plan.md"
+
+echo ""
+
+# Operational Runbooks
+echo "Operational Runbooks:"
+check_item "MySQL Recovery Runbook" "/var/backup-documentation/runbooks/mysql_recovery.md"
+check_item "PostgreSQL Recovery Runbook" "/var/backup-documentation/runbooks/postgresql_recovery.md"
+check_item "Ransomware Response Runbook" "/var/backup-documentation/runbooks/ransomware_response.md"
+check_item "Network Failover Runbook" "/var/backup-documentation/runbooks/network_failover.md"
+
+echo ""
+
+# Technical Documentation
+echo "Technical Documentation:"
+check_item "System Architecture Diagram" "/var/backup-documentation/diagrams/architecture.png"
+check_item "Configuration Documentation" "/var/backup-documentation/generated/markdown/configuration.md"
+check_item "Script Documentation" "/var/backup-documentation/generated/markdown/scripts.md"
+
+echo ""
+
+# HTML Documentation
+echo "HTML Documentation:"
+check_item "Documentation Index" "/var/backup-documentation/generated/html/index.html"
+check_item "HTML Backup Inventory" "/var/backup-documentation/generated/html/backup_inventory.html"
+check_item "HTML DR Plan" "/var/backup-documentation/generated/html/disaster_recovery_plan.html"
+
+echo ""
+echo "========================================"
+echo "Documentation checklist complete"
+CHECKLIST
+
+chmod +x documentation_checklist.sh
+```
+
+---
+
+**🎯 Модуль 14 завершен!**
+
+**Практические навыки:**
+- 📚 Automated documentation generation
+- 📝 Comprehensive runbook creation
+- 🔄 Documentation lifecycle management
+- ✅ Quality validation procedures
+- 🌐 Multi-format output (Markdown, HTML, PDF)
+
+**Помни:**
+> "Documentation is a love letter to your future self"  
+> "If it's not documented, it doesn't exist"  
+> "Runbooks save lives (and careers)"
+
+**Следующие шаги:**
+1. Регулярно обновляй документацию (ежемесячно)
+2. Тестируй runbook'и на практике
+3. Собирай feedback от команды
+4. Автоматизируй генерацию документации
+5. Интегрируй в CI/CD pipeline
+
+**Успехов в документировании! 📚**

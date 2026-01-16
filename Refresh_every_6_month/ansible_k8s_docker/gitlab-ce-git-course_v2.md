@@ -1482,7 +1482,7 @@ Login user
   "expires_in": 3600
 }
 ```
-```
+
 
 3. **Создай Snippet для часто используемого кода:**
    - Snippets → New snippet

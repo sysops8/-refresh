@@ -1279,7 +1279,7 @@ container_scanning:
 ### 🎯 Напоминалка
 
 **Wiki structure:**
-````
+```
 Project Wiki:
 ├── Home
 ├── Getting Started
@@ -1307,7 +1307,7 @@ More content
 def example():
     pass
 
-```
+
 ## Links
 [Internal Page](another-page)
 [External](https://example.com)

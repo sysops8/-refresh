@@ -612,16 +612,14 @@ Title: Draft: Add feature X
 ```
 
 **Suggestions в Code Review:**
-````markdown
+```markdown
 # Оставь комментарий с suggestion
 ```suggestion
 def improved_function():
     return "Better implementation"
+
 # Автор может применить одним кликом
 ```
-
-
-````
 
 ### 💻 Задание
 
@@ -1199,18 +1197,337 @@ test:integration:
   needs: [build]
   script: make test-integration
 
-
-     - Remove tags older than: 30 days
-     - Remove untagged manifests: Yes
+deploy:
+  stage: deploy
+  needs: [test:unit, test:integration]
+  script: make deploy
 ```
-7. **Используй образы из registry в deployment:**
+
+**Artifacts и Reports:**
+```yaml
+test:
+  stage: test
+  script:
+    - pytest --junitxml=report.xml
+  artifacts:
+    reports:
+      junit: report.xml
+
+coverage:
+  stage: test
+  script:
+    - pytest --cov-report xml:coverage.xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+```
+
+### 💻 Задание
+
+Создай продвинутый pipeline:
+
+1. **Добавь needs для зависимостей:**
+```yaml
+# Обнови .gitlab-ci.yml
+test:unit:
+  stage: test
+  needs: ["build"]
+  script:
+    - echo "Running unit tests..."
+    - pytest src/tests/unit/
+
+test:integration:
+  stage: test
+  needs: ["build"]
+  script:
+    - echo "Running integration tests..."
+    - pytest src/tests/integration/
+
+test:e2e:
+  stage: test
+  needs: ["build"]
+  script:
+    - echo "Running E2E tests..."
+    - pytest src/tests/e2e/
+
+deploy:staging:
+  stage: deploy
+  needs: ["test:unit", "test:integration", "test:e2e"]
+  script:
+    - echo "Deploying to staging..."
+  when: manual
+```
+
+2. **Добавь Parallel jobs:**
+```yaml
+test:parallel:
+  stage: test
+  parallel: 3
+  script:
+    - echo "Running parallel test $CI_NODE_INDEX of $CI_NODE_TOTAL"
+    - python run_parallel_test.py --index $CI_NODE_INDEX --total $CI_NODE_TOTAL
+```
+
+3. **Добавь Review Apps:**
+```yaml
+review:
+  stage: deploy
+  script:
+    - echo "Deploying Review App for $CI_COMMIT_REF_NAME"
+    - deploy-review-app.sh
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    url: https://$CI_COMMIT_REF_SLUG.review.example.com
+    on_stop: stop_review
+  only:
+    - branches
+  except:
+    - main
+
+stop_review:
+  stage: cleanup
+  script:
+    - echo "Stopping Review App"
+    - cleanup-review-app.sh
+  environment:
+    name: review/$CI_COMMIT_REF_NAME
+    action: stop
+  when: manual
+```
+
+4. **Используй Dynamic Environments:**
+```yaml
+deploy:feature:
+  stage: deploy
+  script:
+    - echo "Deploying feature branch"
+    - deploy-feature.sh
+  environment:
+    name: feature/$CI_COMMIT_REF_NAME
+    url: https://$CI_COMMIT_REF_SLUG.feature.example.com
+  only:
+    refs:
+      - /^feature-.*$/
+```
+
+5. **Добавь Retry и Timeout:**
+```yaml
+deploy:production:
+  stage: deploy
+  script:
+    - echo "Deploying to production..."
+    - deploy-production.sh
+  retry:
+    max: 2
+    when:
+      - runner_system_failure
+      - stuck_or_timeout_failure
+  timeout: 30 minutes
+  only:
+    - main
+```
+
+### 🚀 Бонус (новое)
+
+**1. Используй Pipeline Triggers:**
+```yaml
+trigger:downstream:
+  stage: deploy
+  trigger:
+    project: group/downstream-project
+    branch: main
+    strategy: depend
+```
+
+**2. Используй Parent-Child Pipelines:**
+```yaml
+generate-config:
+  stage: build
+  script:
+    - python generate-pipeline.py > child-pipeline.yml
+  artifacts:
+    paths:
+      - child-pipeline.yml
+
+trigger-child:
+  stage: deploy
+  trigger:
+    include:
+      - artifact: child-pipeline.yml
+        job: generate-config
+    strategy: depend
+```
+
+**3. Используй когда необходимо intervention:**
+```yaml
+deploy:production:
+  stage: deploy
+  script:
+    - echo "Manual deployment required"
+  when: manual
+  allow_failure: false
+```
+
+**4. Используй Rules с переменными:**
+```yaml
+deploy:
+  stage: deploy
+  script:
+    - echo "Deploying"
+  rules:
+    - if: '$DEPLOY_ENV == "staging"'
+      variables:
+        ENVIRONMENT: "staging"
+    - if: '$DEPLOY_ENV == "production"'
+      variables:
+        ENVIRONMENT: "production"
+      when: manual
+```
+
+---
+
+## Модуль 6: Container Registry и Packages (25 минут)
+
+### 🎯 Напоминалка
+
+**Container Registry структура:**
+```
+Registry:
+├── group/project
+│   ├── image:latest
+│   ├── image:develop
+│   └── image:$CI_COMMIT_SHA
+└── group2/project2
+```
+
+**Команды Docker Registry:**
+```bash
+# Логин
+docker login registry.gitlab.com
+
+# Pull image
+docker pull registry.gitlab.com/group/project:latest
+
+# Push image
+docker push registry.gitlab.com/group/project:$CI_COMMIT_SHA
+
+# List images
+curl --header "PRIVATE-TOKEN: $TOKEN" \
+  "https://gitlab.com/api/v4/projects/1/registry/repositories"
+
+# Delete image
+curl --request DELETE \
+  --header "PRIVATE-TOKEN: $TOKEN" \
+  "https://gitlab.com/api/v4/projects/1/registry/repositories/2/tags/latest"
+```
+
+**Package Registry типы:**
+- Maven (Java)
+- npm (JavaScript)
+- PyPI (Python)
+- NuGet (.NET)
+- Conan (C/C++)
+- Generic packages
+
+**Package Registry URL:**
+```bash
+# Python
+pip install --index-url https://gitlab.com/api/v4/projects/<id>/packages/pypi/simple <package>
+
+# NPM
+npm config set @scope:registry https://gitlab.com/api/v4/packages/npm/
+npm publish
+
+# Maven
+mvn deploy -Durl=https://gitlab.com/api/v4/projects/<id>/packages/maven
+```
+
+### 💻 Задание
+
+Настрой Container Registry:
+
+1. **Создай Dockerfile:**
+```bash
+cd test-app
+
+cat > Dockerfile << 'EOF'
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ src/
+
+ENV PYTHONPATH=/app/src
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python", "-m", "src.app"]
+EOF
+
+git add Dockerfile
+git commit -m "Add Dockerfile"
+git push
+```
+
+2. **Обнови .gitlab-ci.yml для сборки Docker образа:**
+```yaml
+build:docker:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA .
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA $CI_REGISTRY_IMAGE:latest
+    - docker push $CI_REGISTRY_IMAGE:latest
+  only:
+    - main
+    - develop
+    - merge_requests
+```
+
+3. **Добавь security scanning для Docker:**
+```yaml
+container_scanning:
+  stage: test
+  image:
+    name: aquasec/trivy:latest
+    entrypoint: [""]
+  services:
+    - docker:dind
+  variables:
+    DOCKER_DRIVER: overlay2
+    TRIVY_NO_PROGRESS: "true"
+  script:
+    - trivy image --exit-code 0 --no-progress $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - trivy image --exit-code 1 --severity HIGH,CRITICAL $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+  allow_failure: true
+```
+
+4. **Настрой очистку registry:**
+   - Settings → CI/CD → Clean up image tags
+   - ✓ Enable cleanup
+   - Keep the most recent: 5 tags
+   - Keep tags matching: `.*`
+   - Remove tags older than: 30 days
+   - Remove untagged manifests: Yes
+
+5. **Используй образы из registry в deployment:**
 ```yaml
 deploy:staging:
   image: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
   script:
     - echo "Deploying from registry..."
 ```
-
 
 ### 🚀 Бонус (новое)
 
@@ -1321,7 +1638,7 @@ def example():
 Personal Snippets  # Только для вас
 Internal Snippets  # Для всех в GitLab
 Public Snippets    # Публичные
-````
+```
 
 ### 💻 Задание
 
@@ -1354,7 +1671,7 @@ graph LR
     C --> D[Database]
     C --> E[Cache]
 ```
-```
+
 ## Contact
 - Team: @team-name
 - Support: support@example.com
@@ -1483,7 +1800,6 @@ Login user
 }
 ```
 
-
 3. **Создай Snippet для часто используемого кода:**
    - Snippets → New snippet
    - Title: "GitLab CI/CD Docker Build Template"
@@ -1569,7 +1885,7 @@ git add CONTRIBUTING.md
 git commit -m "Add contributing guidelines"
 git push
 ```
-```
+
 ### 🚀 Бонус (новое)
 
 **1. Используй Pages для статической документации:**

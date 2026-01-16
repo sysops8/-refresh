@@ -1279,7 +1279,7 @@ container_scanning:
 ### 🎯 Напоминалка
 
 **Wiki structure:**
-```
+````
 Project Wiki:
 ├── Home
 ├── Getting Started
@@ -1306,7 +1306,7 @@ More content
 ```python
 def example():
     pass
-```
+
 ```
 ## Links
 [Internal Page](another-page)
@@ -1321,7 +1321,7 @@ def example():
 Personal Snippets  # Только для вас
 Internal Snippets  # Для всех в GitLab
 Public Snippets    # Публичные
-```
+````
 
 ### 💻 Задание
 

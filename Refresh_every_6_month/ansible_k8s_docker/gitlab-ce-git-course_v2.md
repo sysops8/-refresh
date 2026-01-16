@@ -612,7 +612,7 @@ Title: Draft: Add feature X
 ```
 
 **Suggestions в Code Review:**
-```markdown
+````markdown
 # Оставь комментарий с suggestion
 ```suggestion
 def improved_function():
@@ -621,7 +621,7 @@ def improved_function():
 ```
 
 
-```
+````
 
 ### 💻 Задание
 

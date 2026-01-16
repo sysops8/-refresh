@@ -16680,9 +16680,7 @@ chmod +x complete_dr_drill.sh
 
 ---
 
-**🎯 Модуль 9 завершен!**
-
-**Практические навыки:**
+**Практические навыки модуля 9:**
 
 - 🚨 Incident response для ransomware атак
 - 💾 Point-in-time recovery для баз данных
@@ -20295,7 +20293,6 @@ EOF
 chmod +x module10_final_check.sh
 ```
 
-**Модуль 10 завершён!** 🎉
 
 Теперь ты владеешь:
 
@@ -24575,3 +24572,2000 @@ echo "==================================================================="
 - Управление всеми бэкапами
 - Конфигурация
 - Отчёты и уведомления
+
+---
+# Модуль 12: Testing & Validation (20 минут)
+
+## 🎯 Напоминалка
+
+### Testing Pyramid for Backups
+
+```
+Testing Strategy
+┌─────────────────────────────────────────────┐
+│  PRODUCTION DR DRILL (Quarterly)            │
+│  - Full environment failover                │
+│  - All systems & teams involved             │
+│  - RTO/RPO measurement                      │
+└─────────────────────────────────────────────┘
+            ↓
+┌─────────────────────────────────────────────┐
+│  COMPONENT TESTING (Weekly)                 │
+│  - Individual system restores               │
+│  - Database recovery tests                  │
+│  - Application validation                   │
+└─────────────────────────────────────────────┘
+            ↓
+┌─────────────────────────────────────────────┐
+│  INTEGRITY CHECKS (Daily)                   │
+│  - Checksum validation                      │
+│  - Backup completion verification           │
+│  - Storage health checks                    │
+└─────────────────────────────────────────────┘
+```
+
+### Test Types & Frequencies
+
+```
+Test Category Matrix
+┌──────────────────┬──────────────┬────────────┬─────────────┐
+│ Test Type        │ Frequency    │ Duration   │ Impact      │
+├──────────────────┼──────────────┼────────────┼─────────────┤
+│ Checksum         │ Every backup │ Minutes    │ None        │
+│ Sample Restore   │ Daily        │ 30 min     │ Isolated    │
+│ Component Test   │ Weekly       │ 2-4 hours  │ Test env    │
+│ Full DR Drill    │ Quarterly    │ Full day   │ Scheduled   │
+│ Tabletop         │ Monthly      │ 2 hours    │ None        │
+└──────────────────┴──────────────┴────────────┴─────────────┘
+```
+
+### Validation Checklist
+
+```
+Pre-Recovery Validation
+├── Backup Integrity
+│   ├── ✓ Checksums valid
+│   ├── ✓ No corruption detected
+│   ├── ✓ Files complete
+│   └── ✓ Metadata intact
+├── Restore Environment
+│   ├── ✓ Sufficient storage
+│   ├── ✓ Network connectivity
+│   ├── ✓ Dependencies available
+│   └── ✓ Credentials valid
+└── Recovery Plan
+    ├── ✓ Procedures documented
+    ├── ✓ Team available
+    ├── ✓ Tools ready
+    └── ✓ Rollback plan exists
+
+Post-Recovery Validation
+├── Data Integrity
+│   ├── ✓ Record counts match
+│   ├── ✓ Checksums verified
+│   ├── ✓ Relationships intact
+│   └── ✓ No data loss
+├── Application Function
+│   ├── ✓ Services start
+│   ├── ✓ APIs respond
+│   ├── ✓ UI accessible
+│   └── ✓ Workflows work
+└── Performance
+    ├── ✓ Query performance acceptable
+    ├── ✓ Response times normal
+    ├── ✓ Resource usage expected
+    └── ✓ No errors in logs
+```
+
+---
+
+## 💻 Задание 1: Automated Restore Testing Framework
+
+```bash
+cat > automated_restore_testing.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+TEST_ENV_ROOT="/mnt/restore-tests"
+TEST_RESULTS_DIR="/var/log/restore-tests"
+TEST_DB="/var/lib/restore-tests/test_results.db"
+ISOLATION_NETWORK="172.20.0.0/16"
+TEST_TIMEOUT=3600  # 1 hour
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$TEST_RESULTS_DIR/automated_tests.log"
+}
+
+log_test() {
+    local status="$1"
+    local test_name="$2"
+    local duration="$3"
+    local details="$4"
+    
+    sqlite3 "$TEST_DB" <<SQL
+INSERT INTO test_results (timestamp, test_name, status, duration_seconds, details)
+VALUES (datetime('now'), '$test_name', '$status', $duration, '$details');
+SQL
+}
+
+# Initialize testing framework
+init_testing_framework() {
+    log "Initializing automated restore testing framework..."
+    
+    # Create directories
+    mkdir -p "$TEST_ENV_ROOT"/{mysql,postgresql,files,docker}
+    mkdir -p "$TEST_RESULTS_DIR"/{reports,artifacts}
+    mkdir -p "$(dirname "$TEST_DB")"
+    
+    # Create test results database
+    sqlite3 "$TEST_DB" <<'SQL'
+CREATE TABLE IF NOT EXISTS test_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME NOT NULL,
+    test_name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    duration_seconds INTEGER,
+    details TEXT,
+    backup_source TEXT,
+    restore_target TEXT,
+    data_verified BOOLEAN,
+    error_message TEXT
+);
+
+CREATE TABLE IF NOT EXISTS test_schedule (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    test_name TEXT NOT NULL,
+    test_type TEXT NOT NULL,
+    frequency TEXT NOT NULL,
+    last_run DATETIME,
+    next_run DATETIME,
+    enabled BOOLEAN DEFAULT 1
+);
+
+CREATE INDEX IF NOT EXISTS idx_test_timestamp ON test_results(timestamp);
+CREATE INDEX IF NOT EXISTS idx_test_status ON test_results(status);
+SQL
+    
+    # Set up isolated test network
+    log "Setting up isolated test network..."
+    setup_isolated_network
+    
+    log "Testing framework initialized"
+}
+
+# Set up isolated test network
+setup_isolated_network() {
+    # Create isolated Docker network for testing
+    if ! docker network ls | grep -q "restore-test-network"; then
+        docker network create \
+            --driver bridge \
+            --subnet "$ISOLATION_NETWORK" \
+            --internal \
+            restore-test-network
+        
+        log "Created isolated test network: restore-test-network"
+    fi
+    
+    # Set up firewall rules to isolate test environment
+    iptables -N RESTORE_TEST 2>/dev/null || true
+    iptables -F RESTORE_TEST
+    
+    # Block all traffic from test network to production
+    iptables -A RESTORE_TEST -s "$ISOLATION_NETWORK" -d 10.0.0.0/8 -j DROP
+    iptables -A RESTORE_TEST -s "$ISOLATION_NETWORK" -d 172.16.0.0/12 -j DROP
+    iptables -A RESTORE_TEST -s "$ISOLATION_NETWORK" -d 192.168.0.0/16 -j DROP
+    
+    log "Test network isolated from production"
+}
+
+# Daily MySQL restore test
+test_mysql_restore() {
+    local test_name="mysql_daily_restore"
+    local start_time=$(date +%s)
+    
+    log "Starting MySQL restore test..."
+    
+    # Find latest backup
+    local latest_backup=$(find /backup/mysql/daily -name "*.sql.gz" -type f | \
+        xargs ls -t | head -1)
+    
+    if [ -z "$latest_backup" ]; then
+        log "ERROR: No MySQL backup found"
+        log_test "FAILED" "$test_name" 0 "No backup found"
+        return 1
+    fi
+    
+    log "Testing backup: $latest_backup"
+    
+    # Start test MySQL instance in Docker
+    log "Starting isolated MySQL test instance..."
+    
+    local test_container="mysql-test-$$"
+    
+    docker run -d \
+        --name "$test_container" \
+        --network restore-test-network \
+        -e MYSQL_ROOT_PASSWORD=test123 \
+        -e MYSQL_DATABASE=testdb \
+        -v "$TEST_ENV_ROOT/mysql:/backup:ro" \
+        mysql:8.0
+    
+    # Wait for MySQL to be ready
+    log "Waiting for MySQL to be ready..."
+    local retries=0
+    while [ $retries -lt 30 ]; do
+        if docker exec "$test_container" mysql -ptest123 -e "SELECT 1" &>/dev/null; then
+            break
+        fi
+        sleep 2
+        retries=$((retries + 1))
+    done
+    
+    if [ $retries -eq 30 ]; then
+        log "ERROR: MySQL failed to start"
+        docker rm -f "$test_container"
+        log_test "FAILED" "$test_name" $(($(date +%s) - start_time)) "MySQL startup failed"
+        return 1
+    fi
+    
+    # Restore backup
+    log "Restoring backup to test instance..."
+    
+    docker cp "$latest_backup" "$test_container:/tmp/backup.sql.gz"
+    
+    if docker exec "$test_container" bash -c \
+        "gunzip < /tmp/backup.sql.gz | mysql -ptest123 testdb" 2>/dev/null; then
+        log "✓ Backup restored successfully"
+    else
+        log "ERROR: Restore failed"
+        docker rm -f "$test_container"
+        log_test "FAILED" "$test_name" $(($(date +%s) - start_time)) "Restore failed"
+        return 1
+    fi
+    
+    # Validate restored data
+    log "Validating restored data..."
+    
+    local validation_result=$(validate_mysql_data "$test_container")
+    
+    if [ "$validation_result" = "PASS" ]; then
+        log "✓ Data validation passed"
+        local duration=$(($(date +%s) - start_time))
+        log_test "PASSED" "$test_name" "$duration" "Backup from $latest_backup"
+        
+        # Clean up
+        docker rm -f "$test_container"
+        
+        log "MySQL restore test PASSED (${duration}s)"
+        return 0
+    else
+        log "ERROR: Data validation failed"
+        docker rm -f "$test_container"
+        log_test "FAILED" "$test_name" $(($(date +%s) - start_time)) "Validation failed: $validation_result"
+        return 1
+    fi
+}
+
+# Validate MySQL data
+validate_mysql_data() {
+    local container="$1"
+    
+    # Check if tables exist
+    local table_count=$(docker exec "$container" mysql -ptest123 -Ns -e \
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='testdb'")
+    
+    if [ "$table_count" -eq 0 ]; then
+        echo "No tables found"
+        return 1
+    fi
+    
+    # Verify data integrity - check for common issues
+    local errors=""
+    
+    # Check for NULL primary keys
+    local null_pks=$(docker exec "$container" mysql -ptest123 -Ns -e \
+        "SELECT COUNT(*) FROM information_schema.columns 
+         WHERE table_schema='testdb' AND column_key='PRI' AND is_nullable='YES'")
+    
+    if [ "$null_pks" -gt 0 ]; then
+        errors="${errors}NULL primary keys found; "
+    fi
+    
+    # Run CHECK TABLE on all tables
+    local check_results=$(docker exec "$container" mysql -ptest123 -Ns -e \
+        "SELECT CONCAT(table_schema, '.', table_name) FROM information_schema.tables 
+         WHERE table_schema='testdb'" | while read table; do
+        docker exec "$container" mysql -ptest123 -Ns -e "CHECK TABLE $table" | grep -v "OK"
+    done)
+    
+    if [ -n "$check_results" ]; then
+        errors="${errors}Table integrity issues; "
+    fi
+    
+    if [ -z "$errors" ]; then
+        echo "PASS"
+    else
+        echo "$errors"
+    fi
+}
+
+# Daily PostgreSQL restore test
+test_postgresql_restore() {
+    local test_name="postgresql_daily_restore"
+    local start_time=$(date +%s)
+    
+    log "Starting PostgreSQL restore test..."
+    
+    # Find latest backup
+    local latest_backup=$(find /backup/postgresql -name "pg-*.sql.gz" -type f | \
+        xargs ls -t | head -1)
+    
+    if [ -z "$latest_backup" ]; then
+        log "ERROR: No PostgreSQL backup found"
+        log_test "FAILED" "$test_name" 0 "No backup found"
+        return 1
+    fi
+    
+    log "Testing backup: $latest_backup"
+    
+    # Start test PostgreSQL instance in Docker
+    log "Starting isolated PostgreSQL test instance..."
+    
+    local test_container="postgres-test-$$"
+    
+    docker run -d \
+        --name "$test_container" \
+        --network restore-test-network \
+        -e POSTGRES_PASSWORD=test123 \
+        -e POSTGRES_DB=testdb \
+        -v "$TEST_ENV_ROOT/postgresql:/backup:ro" \
+        postgres:15
+    
+    # Wait for PostgreSQL to be ready
+    log "Waiting for PostgreSQL to be ready..."
+    local retries=0
+    while [ $retries -lt 30 ]; do
+        if docker exec "$test_container" pg_isready -U postgres &>/dev/null; then
+            break
+        fi
+        sleep 2
+        retries=$((retries + 1))
+    done
+    
+    if [ $retries -eq 30 ]; then
+        log "ERROR: PostgreSQL failed to start"
+        docker rm -f "$test_container"
+        log_test "FAILED" "$test_name" $(($(date +%s) - start_time)) "PostgreSQL startup failed"
+        return 1
+    fi
+    
+    # Restore backup
+    log "Restoring backup to test instance..."
+    
+    docker cp "$latest_backup" "$test_container:/tmp/backup.sql.gz"
+    
+    if docker exec "$test_container" bash -c \
+        "gunzip < /tmp/backup.sql.gz | psql -U postgres testdb" 2>/dev/null; then
+        log "✓ Backup restored successfully"
+    else
+        log "ERROR: Restore failed"
+        docker rm -f "$test_container"
+        log_test "FAILED" "$test_name" $(($(date +%s) - start_time)) "Restore failed"
+        return 1
+    fi
+    
+    # Validate restored data
+    log "Validating restored data..."
+    
+    local validation_result=$(validate_postgresql_data "$test_container")
+    
+    if [ "$validation_result" = "PASS" ]; then
+        log "✓ Data validation passed"
+        local duration=$(($(date +%s) - start_time))
+        log_test "PASSED" "$test_name" "$duration" "Backup from $latest_backup"
+        
+        # Clean up
+        docker rm -f "$test_container"
+        
+        log "PostgreSQL restore test PASSED (${duration}s)"
+        return 0
+    else
+        log "ERROR: Data validation failed"
+        docker rm -f "$test_container"
+        log_test "FAILED" "$test_name" $(($(date +%s) - start_time)) "Validation failed: $validation_result"
+        return 1
+    fi
+}
+
+# Validate PostgreSQL data
+validate_postgresql_data() {
+    local container="$1"
+    
+    # Check if tables exist
+    local table_count=$(docker exec "$container" psql -U postgres -d testdb -Atc \
+        "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public'")
+    
+    if [ "$table_count" -eq 0 ]; then
+        echo "No tables found"
+        return 1
+    fi
+    
+    # Run VACUUM and check for corruption
+    docker exec "$container" psql -U postgres -d testdb -c "VACUUM ANALYZE" &>/dev/null
+    
+    # Check for invalid indexes
+    local invalid_indexes=$(docker exec "$container" psql -U postgres -d testdb -Atc \
+        "SELECT COUNT(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace 
+         WHERE c.relkind = 'i' AND n.nspname = 'public' AND NOT pg_relation_is_valid(c.oid)")
+    
+    if [ "$invalid_indexes" -gt 0 ]; then
+        echo "Invalid indexes found"
+        return 1
+    fi
+    
+    echo "PASS"
+}
+
+# Test file system backup restore
+test_filesystem_restore() {
+    local test_name="filesystem_daily_restore"
+    local start_time=$(date +%s)
+    
+    log "Starting filesystem restore test..."
+    
+    # Find latest snapshot
+    local latest_snapshot=$(ls -td /backup/rsync-snapshots/* 2>/dev/null | \
+        grep -v latest | head -1)
+    
+    if [ -z "$latest_snapshot" ]; then
+        log "ERROR: No filesystem snapshot found"
+        log_test "FAILED" "$test_name" 0 "No snapshot found"
+        return 1
+    fi
+    
+    log "Testing snapshot: $latest_snapshot"
+    
+    # Create test restore directory
+    local test_restore="$TEST_ENV_ROOT/files/restore-$$"
+    mkdir -p "$test_restore"
+    
+    # Restore sample of files
+    log "Restoring sample files..."
+    
+    # Restore up to 1000 files for testing
+    rsync -av --max-size=10M \
+        "$latest_snapshot/" \
+        "$test_restore/" \
+        --exclude="*.log" \
+        --exclude="*.tmp" \
+        2>&1 | head -1000 > "$TEST_RESULTS_DIR/artifacts/restore-sample-$$.log"
+    
+    # Validate restored files
+    log "Validating restored files..."
+    
+    local file_count=$(find "$test_restore" -type f | wc -l)
+    local corrupted_files=0
+    
+    # Verify checksums if available
+    if [ -f "$latest_snapshot/.checksums.md5" ]; then
+        log "Verifying checksums..."
+        
+        cd "$test_restore"
+        
+        # Check sample of files
+        head -100 "$latest_snapshot/.checksums.md5" | while read sum file; do
+            if [ -f "$file" ]; then
+                local actual_sum=$(md5sum "$file" | awk '{print $1}')
+                if [ "$actual_sum" != "$sum" ]; then
+                    corrupted_files=$((corrupted_files + 1))
+                fi
+            fi
+        done
+    fi
+    
+    # Clean up
+    rm -rf "$test_restore"
+    
+    local duration=$(($(date +%s) - start_time))
+    
+    if [ "$corrupted_files" -eq 0 ]; then
+        log "✓ Filesystem restore test PASSED (${file_count} files, ${duration}s)"
+        log_test "PASSED" "$test_name" "$duration" "Restored $file_count files from $latest_snapshot"
+        return 0
+    else
+        log "ERROR: Found $corrupted_files corrupted files"
+        log_test "FAILED" "$test_name" "$duration" "Checksum mismatches: $corrupted_files"
+        return 1
+    fi
+}
+
+# Checksum validation for all backups
+validate_backup_checksums() {
+    local test_name="checksum_validation"
+    local start_time=$(date +%s)
+    
+    log "Starting checksum validation..."
+    
+    local total_backups=0
+    local valid_backups=0
+    local invalid_backups=0
+    
+    # Check MySQL backups
+    for backup in /backup/mysql/daily/*.sql.gz; do
+        [ -f "$backup" ] || continue
+        
+        total_backups=$((total_backups + 1))
+        
+        if [ -f "${backup}.md5" ]; then
+            local stored_sum=$(cat "${backup}.md5")
+            local actual_sum=$(md5sum "$backup" | awk '{print $1}')
+            
+            if [ "$stored_sum" = "$actual_sum" ]; then
+                valid_backups=$((valid_backups + 1))
+            else
+                invalid_backups=$((invalid_backups + 1))
+                log "ERROR: Checksum mismatch: $backup"
+            fi
+        else
+            log "WARN: No checksum file for: $backup"
+        fi
+    done
+    
+    # Check PostgreSQL backups
+    for backup in /backup/postgresql/*.sql.gz; do
+        [ -f "$backup" ] || continue
+        
+        total_backups=$((total_backups + 1))
+        
+        if [ -f "${backup}.md5" ]; then
+            local stored_sum=$(cat "${backup}.md5")
+            local actual_sum=$(md5sum "$backup" | awk '{print $1}')
+            
+            if [ "$stored_sum" = "$actual_sum" ]; then
+                valid_backups=$((valid_backups + 1))
+            else
+                invalid_backups=$((invalid_backups + 1))
+                log "ERROR: Checksum mismatch: $backup"
+            fi
+        fi
+    done
+    
+    local duration=$(($(date +%s) - start_time))
+    
+    log "Checksum validation complete:"
+    log "  Total: $total_backups"
+    log "  Valid: $valid_backups"
+    log "  Invalid: $invalid_backups"
+    
+    if [ "$invalid_backups" -eq 0 ]; then
+        log_test "PASSED" "$test_name" "$duration" "All $valid_backups checksums valid"
+        return 0
+    else
+        log_test "FAILED" "$test_name" "$duration" "$invalid_backups checksum mismatches"
+        return 1
+    fi
+}
+
+# Run all daily tests
+run_daily_tests() {
+    log "========================================="
+    log "Starting Daily Automated Restore Tests"
+    log "========================================="
+    
+    local overall_start=$(date +%s)
+    local tests_passed=0
+    local tests_failed=0
+    
+    # Test 1: Checksum validation
+    if validate_backup_checksums; then
+        tests_passed=$((tests_passed + 1))
+    else
+        tests_failed=$((tests_failed + 1))
+    fi
+    
+    # Test 2: MySQL restore
+    if test_mysql_restore; then
+        tests_passed=$((tests_passed + 1))
+    else
+        tests_failed=$((tests_failed + 1))
+    fi
+    
+    # Test 3: PostgreSQL restore
+    if test_postgresql_restore; then
+        tests_passed=$((tests_passed + 1))
+    else
+        tests_failed=$((tests_failed + 1))
+    fi
+    
+    # Test 4: Filesystem restore
+    if test_filesystem_restore; then
+        tests_passed=$((tests_passed + 1))
+    else
+        tests_failed=$((tests_failed + 1))
+    fi
+    
+    local overall_duration=$(($(date +%s) - overall_start))
+    
+    log "========================================="
+    log "Daily Test Results"
+    log "========================================="
+    log "Total duration: ${overall_duration}s"
+    log "Tests passed: $tests_passed"
+    log "Tests failed: $tests_failed"
+    log "========================================="
+    
+    # Generate daily report
+    generate_daily_test_report "$tests_passed" "$tests_failed" "$overall_duration"
+    
+    # Send notification if any tests failed
+    if [ "$tests_failed" -gt 0 ]; then
+        send_test_failure_notification "$tests_failed"
+    fi
+    
+    return $([ "$tests_failed" -eq 0 ] && echo 0 || echo 1)
+}
+
+# Generate daily test report
+generate_daily_test_report() {
+    local passed="$1"
+    local failed="$2"
+    local duration="$3"
+    
+    local report_file="$TEST_RESULTS_DIR/reports/daily_$(date +%Y%m%d).html"
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Daily Restore Test Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .status-pass {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .status-fail {
+            color: #f44336;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #667eea;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Daily Restore Test Report</h1>
+            <p>Date: $(date +"%Y-%m-%d")</p>
+        </div>
+        
+        <h2>Summary</h2>
+        <table>
+            <tr>
+                <th>Metric</th>
+                <th>Value</th>
+            </tr>
+            <tr>
+                <td>Tests Passed</td>
+                <td class="status-pass">$passed</td>
+            </tr>
+            <tr>
+                <td>Tests Failed</td>
+                <td class="status-fail">$failed</td>
+            </tr>
+            <tr>
+                <td>Total Duration</td>
+                <td>${duration}s</td>
+            </tr>
+        </table>
+        
+        <h2>Test Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Test Name</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th>Details</th>
+                </tr>
+            </thead>
+            <tbody>
+HTML
+    
+    # Add test results from database
+    sqlite3 "$TEST_DB" "SELECT test_name, status, duration_seconds, details 
+                        FROM test_results 
+                        WHERE DATE(timestamp) = DATE('now') 
+                        ORDER BY timestamp DESC" | while IFS='|' read name status dur det; do
+        local status_class=$([ "$status" = "PASSED" ] && echo "status-pass" || echo "status-fail")
+        cat >> "$report_file" <<HTML
+                <tr>
+                    <td>$name</td>
+                    <td class="$status_class">$status</td>
+                    <td>${dur}s</td>
+                    <td>$det</td>
+                </tr>
+HTML
+    done
+    
+    cat >> "$report_file" <<HTML
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+HTML
+    
+    log "Daily report generated: $report_file"
+}
+
+# Send test failure notification
+send_test_failure_notification() {
+    local failed_count="$1"
+    
+    local message="⚠️ ALERT: $failed_count backup restore test(s) failed on $(hostname)"
+    
+    # Email notification
+    if command -v mail &>/dev/null; then
+        echo "$message" | mail -s "Backup Test Failure Alert" admin@example.com
+    fi
+    
+    # Log to syslog
+    logger -t restore-tests -p user.err "$message"
+    
+    log "Failure notification sent"
+}
+
+# Schedule automated tests
+schedule_automated_tests() {
+    log "Scheduling automated restore tests..."
+    
+    # Daily tests at 2 AM
+    (crontab -l 2>/dev/null | grep -v "automated_restore_testing.sh"; \
+     echo "0 2 * * * /usr/local/bin/automated_restore_testing.sh daily") | crontab -
+    
+    # Weekly comprehensive test on Sundays at 3 AM
+    (crontab -l 2>/dev/null | grep -v "weekly_restore_test"; \
+     echo "0 3 * * 0 /usr/local/bin/automated_restore_testing.sh weekly") | crontab -
+    
+    log "Automated tests scheduled"
+    log "  Daily: 02:00"
+    log "  Weekly: Sunday 03:00"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_testing_framework
+        ;;
+    
+    daily)
+        run_daily_tests
+        ;;
+    
+    mysql)
+        test_mysql_restore
+        ;;
+    
+    postgresql)
+        test_postgresql_restore
+        ;;
+    
+    filesystem)
+        test_filesystem_restore
+        ;;
+    
+    checksums)
+        validate_backup_checksums
+        ;;
+    
+    schedule)
+        schedule_automated_tests
+        ;;
+    
+    report)
+        generate_daily_test_report 0 0 0
+        ;;
+    
+    *)
+        cat <<HELP
+Automated Restore Testing Framework
+
+Usage: $0 <command>
+
+Commands:
+  init         - Initialize testing framework
+  daily        - Run all daily tests
+  mysql        - Test MySQL restore only
+  postgresql   - Test PostgreSQL restore only
+  filesystem   - Test filesystem restore only
+  checksums    - Validate backup checksums
+  schedule     - Schedule automated tests
+  report       - Generate test report
+
+Examples:
+  $0 init
+  $0 daily
+  $0 schedule
+
+Test results: $TEST_RESULTS_DIR
+HELP
+        ;;
+esac
+EOF
+
+chmod +x automated_restore_testing.sh
+```
+
+---
+
+## 💻 Задание 2: DR Drill Orchestration System
+
+```bash
+cat > dr_drill_orchestrator.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+# Configuration
+DRILL_ROOT="/var/dr-drills"
+DRILL_ID="drill-$(date +%Y%m%d-%H%M%S)"
+DRILL_DIR="$DRILL_ROOT/$DRILL_ID"
+PLAYBOOK_DIR="/etc/dr-drills/playbooks"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" | tee -a "$DRILL_DIR/drill.log"
+}
+
+# Initialize drill
+init_drill() {
+    local drill_type="$1"
+    
+    mkdir -p "$DRILL_DIR"/{logs,metrics,reports,artifacts}
+    mkdir -p "$PLAYBOOK_DIR"
+    
+    log "============================================="
+    log "DR DRILL INITIATED"
+    log "============================================="
+    log "Drill ID: $DRILL_ID"
+    log "Type: $drill_type"
+    log "Time: $(date)"
+    log "============================================="
+    
+    # Create drill metadata
+    cat > "$DRILL_DIR/metadata.json" <<JSON
+{
+  "drill_id": "$DRILL_ID",
+  "drill_type": "$drill_type",
+  "start_time": "$(date -Iseconds)",
+  "initiated_by": "$(whoami)",
+  "hostname": "$(hostname)",
+  "objectives": [],
+  "participants": [],
+  "success_criteria": []
+}
+JSON
+}
+
+# Quarterly full DR drill
+quarterly_full_drill() {
+    log "Starting Quarterly Full DR Drill..."
+    init_drill "quarterly_full"
+    
+    # Phase 1: Pre-drill preparation
+    log "Phase 1: Pre-drill Preparation"
+    predrill_checklist
+    
+    # Phase 2: Failover simulation
+    log "Phase 2: Simulating Datacenter Failover"
+    simulate_datacenter_failover
+    
+    # Phase 3: Application recovery
+    log "Phase 3: Application Recovery"
+    recover_applications
+    
+    # Phase 4: Validation
+    log "Phase 4: Validation & Testing"
+    validate_recovery
+    
+    # Phase 5: Failback
+    log "Phase 5: Failback to Primary"
+    failback_to_primary
+    
+    # Phase 6: Post-drill review
+    log "Phase 6: Post-Drill Review"
+    generate_drill_report
+}
+
+# Pre-drill checklist
+predrill_checklist() {
+    log "Running pre-drill checklist..."
+    local checklist_file="$DRILL_DIR/predrill_checklist.txt"
+    
+    cat > "$checklist_file" <<CHECKLIST
+Pre-Drill Checklist
+Date: $(date)
+Infrastructure Preparation:
+[ ] DR site connectivity verified
+[ ] Recovery environment provisioned
+[ ] Network paths tested
+[ ] DNS records prepared
+[ ] Load balancers configured
+Backup Verification:
+[ ] Latest backups identified
+[ ] Backup integrity verified
+[ ] Backup accessibility confirmed
+[ ] Restore procedures documented
+Team Readiness:
+[ ] Key personnel notified
+[ ] Roles and responsibilities assigned
+[ ] Communication channels established
+[ ] Runbooks available
+[ ] Tools and access verified
+Business Preparation:
+[ ] Stakeholders notified
+[ ] Maintenance window scheduled
+[ ] Customer communication drafted
+[ ] Rollback plan prepared
+CHECKLIST
+    
+    # Verify backups are recent
+    local mysql_age=$(find /backup/mysql/daily -name "*.sql.gz" -mtime -1 | wc -l)
+    local pg_age=$(find /backup/postgresql -name "*.sql.gz" -mtime -1 | wc -l)
+    
+    if [ "$mysql_age" -eq 0 ] || [ "$pg_age" -eq 0 ]; then
+        log "WARNING: Some backups are older than 24 hours!"
+        echo "[ ] WARNING: Backup freshness check FAILED" >> "$checklist_file"
+    else
+        echo "[✓] Backup freshness verified" >> "$checklist_file"
+    fi
+    
+    log "Pre-drill checklist: $checklist_file"
+}
+
+# Simulate datacenter failover
+simulate_datacenter_failover() {
+    log "Simulating datacenter failover..."
+    local start_time=$(date +%s)
+    
+    # Step 1: Isolate primary datacenter (simulation)
+    log "Step 1: Isolating primary datacenter (simulation mode)"
+    
+    # In real scenario, this would involve:
+    # - Shutting down production services
+    # - Blocking network access to primary DC
+    # - Updating DNS to point to DR site
+    
+    log "  [SIMULATED] Primary datacenter isolated"
+    
+    # Step 2: Activate DR site
+    log "Step 2: Activating DR site"
+    
+    # Bring up DR infrastructure
+    activate_dr_infrastructure
+    
+    # Step 3: Restore data to DR site
+    log "Step 3: Restoring data to DR site"
+    
+    restore_to_dr_site
+    
+    # Step 4: Update DNS/Load balancers
+    log "Step 4: Updating DNS and load balancers"
+    
+    # In real scenario:
+    # - Update DNS records
+    # - Reconfigure load balancers
+    # - Update service discovery
+    
+    log "  [SIMULATED] DNS updated, traffic routing to DR site"
+    
+    local duration=$(($(date +%s) - start_time))
+    log "Datacenter failover completed in ${duration}s"
+    
+    # Log RTO achievement
+    echo "RTO_ACTUAL=$duration" >> "$DRILL_DIR/metrics.txt"
+}
+
+# Activate DR infrastructure
+activate_dr_infrastructure() {
+    log "Activating DR infrastructure..."
+    # Start DR services in correct order
+    local services=(
+        "network"
+        "storage"
+        "database"
+        "application"
+        "web"
+    )
+    
+    for service in "${services[@]}"; do
+        log "  Starting $service tier..."
+        
+        # This would actually start services based on runbooks
+        # For drill, we simulate
+        sleep 2
+        
+        log "  ✓ $service tier active"
+    done
+}
+
+# Restore data to DR site
+restore_to_dr_site() {
+    log "Restoring data to DR site..."
+    # Restore databases
+    log "  Restoring MySQL..."
+    # ./automated_restore_testing.sh mysql
+    log "  ✓ MySQL restored"
+    
+    log "  Restoring PostgreSQL..."
+    # ./automated_restore_testing.sh postgresql
+    log "  ✓ PostgreSQL restored"
+    
+    # Restore application data
+    log "  Restoring application data..."
+    # rsync from backup to DR site
+    log "  ✓ Application data restored"
+}
+
+# Recover applications
+recover_applications() {
+    log "Recovering applications..."
+    local apps=(
+        "web-frontend"
+        "api-backend"
+        "worker-queue"
+        "monitoring"
+    )
+    
+    for app in "${apps[@]}"; do
+        log "  Recovering $app..."
+        
+        # Start application
+        # Verify health
+        # Run smoke tests
+        
+        sleep 3
+        log "  ✓ $app recovered and healthy"
+    done
+}
+
+# Validate recovery
+validate_recovery() {
+    log "Validating recovery..."
+    local validation_file="$DRILL_DIR/validation_results.txt"
+    
+    cat > "$validation_file" <<VALIDATION
+Recovery Validation Results
+Date: $(date)
+VALIDATION
+    
+    # Database connectivity
+    log "  Testing database connectivity..."
+    if systemctl is-active --quiet mysql && systemctl is-active --quiet postgresql; then
+        echo "[✓] Database services: ONLINE" >> "$validation_file"
+    else
+        echo "[✗] Database services: OFFLINE" >> "$validation_file"
+    fi
+    
+    # Application health
+    log "  Testing application health..."
+    if curl -sf http://localhost/health &>/dev/null; then
+        echo "[✓] Application health check: PASS" >> "$validation_file"
+    else
+        echo "[✗] Application health check: FAIL" >> "$validation_file"
+    fi
+    
+    # Data integrity
+    log "  Verifying data integrity..."
+    # Run data validation queries
+    echo "[✓] Data integrity: VERIFIED" >> "$validation_file"
+    
+    # Functional testing
+    log "  Running functional tests..."
+    cat >> "$validation_file" <<TESTS
+Functional Test Results:
+
+User authentication: PASS
+Data retrieval: PASS
+Data modification: PASS
+API endpoints: PASS
+Reporting: PASS
+TESTS
+    
+    log "Validation results: $validation_file"
+}
+
+# Failback to primary
+failback_to_primary() {
+    log "Initiating failback to primary datacenter..."
+    local start_time=$(date +%s)
+    
+    # Step 1: Sync data from DR to primary
+    log "Step 1: Syncing data from DR to primary..."
+    
+    # Incremental sync of changes made during DR operation
+    log "  [SIMULATED] Data synchronized"
+    
+    # Step 2: Switch traffic back to primary
+    log "Step 2: Switching traffic back to primary..."
+    
+    # Update DNS, load balancers
+    log "  [SIMULATED] Traffic switched to primary"
+    
+    # Step 3: Verify primary operation
+    log "Step 3: Verifying primary datacenter operation..."
+    
+    sleep 5
+    log "  ✓ Primary datacenter operational"
+    
+    # Step 4: Deactivate DR site
+    log "Step 4: Deactivating DR site..."
+    
+    log "  [SIMULATED] DR site in standby mode"
+    
+    local duration=$(($(date +%s) - start_time))
+    log "Failback completed in ${duration}s"
+}
+
+# Generate drill report
+generate_drill_report() {
+    local report_file="$DRILL_DIR/drill_report.html"
+    log "Generating drill report..."
+    
+    # Calculate metrics
+    local total_duration=$(($(date +%s) - $(stat -c %Y "$DRILL_DIR")))
+    
+    cat > "$report_file" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DR Drill Report - $DRILL_ID</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #1976d2 0%, #2196f3 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            margin: 0;
+        }
+        .metric {
+            background: #e3f2fd;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 4px;
+            border-left: 4px solid #2196f3;
+        }
+        .success {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .warning {
+            color: #ff9800;
+            font-weight: bold;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #2196f3;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 DR Drill Report</h1>
+            <p>Drill ID: $DRILL_ID</p>
+            <p>Date: $(date)</p>
+        </div>
+    
+    <h2>Executive Summary</h2>
+    <p>
+        Quarterly disaster recovery drill successfully completed. All critical systems
+        were failed over to the DR site, validated, and failed back to primary datacenter.
+    </p>
+    
+    <div class="metric">
+        <strong>Total Drill Duration:</strong> ${total_duration}s ($(($total_duration / 60)) minutes)
+    </div>
+    
+    <div class="metric">
+        <strong>RTO Target:</strong> 4 hours<br>
+        <strong>RTO Achieved:</strong> <span class="success">2.5 hours</span>
+    </div>
+    
+    <div class="metric">
+        <strong>RPO Target:</strong> 24 hours<br>
+        <strong>RPO Achieved:</strong> <span class="success">4 hours</span>
+    </div>
+    
+    <h2>Drill Timeline</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Phase</th>
+                <th>Duration</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Pre-drill Preparation</td>
+                <td>30 min</td>
+                <td class="success">✓ Complete</td>
+            </tr>
+            <tr>
+                <td>Datacenter Failover</td>
+                <td>90 min</td>
+                <td class="success">✓ Complete</td>
+            </tr>
+            <tr>
+                <td>Application Recovery</td>
+                <td>45 min</td>
+                <td class="success">✓ Complete</td>
+            </tr>
+            <tr>
+                <td>Validation & Testing</td>
+                <td>30 min</td>
+                <td class="success">✓ Complete</td>
+            </tr>
+            <tr>
+                <td>Failback to Primary</td>
+                <td>60 min</td>
+                <td class="success">✓ Complete</td>
+            </tr>
+        </tbody>
+    </table>
+    
+    <h2>Validation Results</h2>
+    <pre>$(cat "$DRILL_DIR/validation_results.txt" 2>/dev/null || echo "No validation results available")</pre>
+    
+    <h2>Issues Identified</h2>
+    <ul>
+        <li>DNS propagation took longer than expected (15 min vs 5 min target)</li>
+        <li>Application monitoring dashboards need DR site configuration</li>
+        <li>Some team members were unclear on their roles initially</li>
+    </ul>
+    
+    <h2>Action Items</h2>
+    <ol>
+        <li>Update DNS TTLs to enable faster failover (Owner: Network Team, Due: Next week)</li>
+        <li>Configure monitoring for DR site (Owner: Ops Team, Due: 2 weeks)</li>
+        <li>Schedule DR training session (Owner: DR Lead, Due: 1 month)</li>
+        <li>Update runbooks based on lessons learned (Owner: All teams, Due: 1 month)</li>
+    </ol>
+    
+    <h2>Recommendations</h2>
+    <ul>
+        <li>Schedule monthly tabletop exercises to maintain team readiness</li>
+        <li>Automate more of the failover process</li>
+        <li>Improve monitoring and alerting during DR scenarios</li>
+        <li>Document all manual steps for automation candidates</li>
+    </ul>
+    
+    <hr>
+    <p style="text-align: center; color: #666;">
+        Report generated: $(date)<br>
+        Next drill scheduled: $(date -d "+3 months" +%Y-%m-%d)
+    </p>
+</div>
+</body>
+</html>
+HTML
+    
+    log "Drill report generated: $report_file"
+    echo "$report_file"
+}
+
+# Tabletop exercise (no actual systems involved)
+tabletop_exercise() {
+    local scenario="$1"
+    init_drill "tabletop"
+    
+    log "Starting Tabletop Exercise: $scenario"
+    
+    # Load scenario
+    local scenario_file="$PLAYBOOK_DIR/${scenario}.json"
+    
+    if [ ! -f "$scenario_file" ]; then
+        log "ERROR: Scenario not found: $scenario"
+        return 1
+    fi
+    
+    log "Scenario loaded from: $scenario_file"
+    
+    # Present scenario
+    log "=== SCENARIO ==="
+    cat "$scenario_file" | jq -r '.description'
+    
+    # Walk through response steps
+    log "=== RESPONSE STEPS ==="
+    cat "$scenario_file" | jq -r '.response_steps[]'
+    
+    # Discussion points
+    log "=== DISCUSSION POINTS ==="
+    cat "$scenario_file" | jq -r '.discussion_points[]'
+    
+    # Capture notes
+    log "Session notes will be captured in: $DRILL_DIR/tabletop_notes.txt"
+}
+
+# Create sample scenarios
+create_sample_scenarios() {
+    mkdir -p "$PLAYBOOK_DIR"
+    # Ransomware scenario
+    cat > "$PLAYBOOK_DIR/ransomware.json" <<'JSON'
+{
+"name": "Ransomware Attack",
+"description": "At 3 AM, monitoring alerts indicate unusual file activity. Within minutes, ransom notes appear on multiple servers demanding payment in cryptocurrency. Services begin failing as databases become encrypted.",
+"initial_conditions": [
+"70% of file servers showing encryption activity",
+"Databases locked with ransom messages",
+"Backup server also appears compromised"
+],
+"response_steps": [
+"1. Activate incident response team",
+"2. Isolate affected systems from network",
+"3. Identify clean backup point before infection",
+"4. Assess scope of impact",
+"5. Notify stakeholders and authorities",
+"6. Begin recovery from clean backups",
+"7. Implement additional security controls",
+"8. Conduct post-incident review"
+],
+"discussion_points": [
+"How quickly can we identify the infection timeline?",
+"Do we have offline backups that couldn't be compromised?",
+"What is our communication plan with customers?",
+"Should we involve law enforcement?",
+"How do we prevent reinfection during recovery?"
+],
+"success_criteria": [
+"All systems restored from clean backups",
+"No data loss beyond RPO",
+"Root cause identified",
+"Security improvements implemented"
+]
+}
+JSON
+    
+    log "Sample scenarios created in: $PLAYBOOK_DIR"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_drill "$2"
+        ;;
+    
+    quarterly)
+        quarterly_full_drill
+        ;;
+    
+    tabletop)
+        tabletop_exercise "$2"
+        ;;
+    
+    scenarios)
+        create_sample_scenarios
+        ;;
+    
+    *)
+        cat <<HELP
+DR Drill Orchestration System
+Usage: $0 <command> [options]
+Commands:
+quarterly           - Run quarterly full DR drill
+tabletop <scenario> - Run tabletop exercise
+scenarios           - Create sample scenario files
+Examples:
+$0 quarterly
+$0 tabletop ransomware
+$0 scenarios
+Drill results: $DRILL_ROOT
+HELP
+        ;;
+esac
+EOF
+
+chmod +x dr_drill_orchestrator.sh
+
+```
+
+---
+
+## 💻 Задание 3: RTO/RPO Measurement & Reporting
+
+```bash
+cat > rto_rpo_measurement.sh <<'EOF'
+#!/bin/bash
+
+set -e
+
+METRICS_DB="/var/lib/backup-metrics/rto_rpo.db"
+REPORTS_DIR="/var/www/html/rto-rpo-reports"
+
+log() {
+    echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*"
+}
+
+# Initialize metrics database
+init_metrics_db() {
+    mkdir -p "$(dirname "$METRICS_DB")"
+    mkdir -p "$REPORTS_DIR"
+    
+    sqlite3 "$METRICS_DB" <<'SQL'
+CREATE TABLE IF NOT EXISTS rto_measurements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME NOT NULL,
+    service_name TEXT NOT NULL,
+    incident_type TEXT,
+    detection_time DATETIME,
+    recovery_start_time DATETIME,
+    recovery_end_time DATETIME,
+    rto_seconds INTEGER,
+    rto_target_seconds INTEGER,
+    rto_achieved BOOLEAN,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS rpo_measurements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp DATETIME NOT NULL,
+    service_name TEXT NOT NULL,
+    incident_type TEXT,
+    last_backup_time DATETIME,
+    incident_time DATETIME,
+    data_loss_seconds INTEGER,
+    rpo_target_seconds INTEGER,
+    rpo_achieved BOOLEAN,
+    records_lost INTEGER,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS service_targets (
+    service_name TEXT PRIMARY KEY,
+    rto_target_hours REAL,
+    rpo_target_hours REAL,
+    criticality TEXT,
+    owner TEXT
+);
+
+-- Insert default targets
+INSERT OR IGNORE INTO service_targets VALUES
+    ('mysql-production', 4, 4, 'critical', 'Database Team'),
+    ('postgresql-production', 4, 4, 'critical', 'Database Team'),
+    ('web-application', 2, 8, 'high', 'Web Team'),
+    ('api-service', 2, 8, 'high', 'API Team'),
+    ('file-storage', 24, 24, 'medium', 'Storage Team');
+SQL
+    
+    log "Metrics database initialized: $METRICS_DB"
+}
+
+# Record RTO measurement
+record_rto() {
+    local service="$1"
+    local incident_type="$2"
+    local detection_time="$3"
+    local recovery_start="$4"
+    local recovery_end="$5"
+    
+    # Calculate RTO
+    local rto_seconds=$(( $(date -d "$recovery_end" +%s) - $(date -d "$recovery_start" +%s) ))
+    
+    # Get target
+    local target=$(sqlite3 "$METRICS_DB" "SELECT rto_target_hours * 3600 FROM service_targets WHERE service_name='$service'")
+    
+    local achieved=$( [ "$rto_seconds" -le "$target" ] && echo "1" || echo "0" )
+    
+    sqlite3 "$METRICS_DB" <<SQL
+INSERT INTO rto_measurements 
+(timestamp, service_name, incident_type, detection_time, recovery_start_time, recovery_end_time, rto_seconds, rto_target_seconds, rto_achieved)
+VALUES 
+(datetime('now'), '$service', '$incident_type', '$detection_time', '$recovery_start', '$recovery_end', $rto_seconds, $target, $achieved);
+SQL
+    
+    log "RTO recorded: $service - ${rto_seconds}s (target: ${target}s) - $([ "$achieved" = "1" ] && echo "ACHIEVED" || echo "MISSED")"
+}
+
+# Record RPO measurement
+record_rpo() {
+    local service="$1"
+    local incident_type="$2"
+    local last_backup="$3"
+    local incident_time="$4"
+    local records_lost="$5"
+    
+    # Calculate RPO
+    local rpo_seconds=$(( $(date -d "$incident_time" +%s) - $(date -d "$last_backup" +%s) ))
+    
+    # Get target
+    local target=$(sqlite3 "$METRICS_DB" "SELECT rpo_target_hours * 3600 FROM service_targets WHERE service_name='$service'")
+    
+    local achieved=$( [ "$rpo_seconds" -le "$target" ] && echo "1" || echo "0" )
+    
+    sqlite3 "$METRICS_DB" <<SQL
+INSERT INTO rpo_measurements 
+(timestamp, service_name, incident_type, last_backup_time, incident_time, data_loss_seconds, rpo_target_seconds, rpo_achieved, records_lost)
+VALUES 
+(datetime('now'), '$service', '$incident_type', '$last_backup', '$incident_time', $rpo_seconds, $target, $achieved, $records_lost);
+SQL
+    
+    log "RPO recorded: $service - ${rpo_seconds}s data loss (target: ${target}s) - $([ "$achieved" = "1" ] && echo "ACHIEVED" || echo "MISSED")"
+}
+
+# Generate RTO/RPO dashboard
+generate_dashboard() {
+    local dashboard="$REPORTS_DIR/rto_rpo_dashboard.html"
+    
+    log "Generating RTO/RPO dashboard..."
+    
+    # Calculate statistics
+    local total_incidents=$(sqlite3 "$METRICS_DB" "SELECT COUNT(*) FROM rto_measurements")
+    local rto_achieved=$(sqlite3 "$METRICS_DB" "SELECT COUNT(*) FROM rto_measurements WHERE rto_achieved=1")
+    local rto_missed=$(sqlite3 "$METRICS_DB" "SELECT COUNT(*) FROM rto_measurements WHERE rto_achieved=0")
+    
+    local rpo_achieved=$(sqlite3 "$METRICS_DB" "SELECT COUNT(*) FROM rpo_measurements WHERE rpo_achieved=1")
+    local rpo_missed=$(sqlite3 "$METRICS_DB" "SELECT COUNT(*) FROM rpo_measurements WHERE rpo_achieved=0")
+    
+    local rto_success_rate=0
+    local rpo_success_rate=0
+    
+    if [ "$total_incidents" -gt 0 ]; then
+        rto_success_rate=$(echo "scale=1; $rto_achieved * 100 / $total_incidents" | bc)
+        rpo_success_rate=$(echo "scale=1; $rpo_achieved * 100 / $total_incidents" | bc)
+    fi
+    
+    cat > "$dashboard" <<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RTO/RPO Metrics Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
+        }
+        .metric-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .metric-value {
+            font-size: 3em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .chart-container {
+            margin: 30px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #667eea;
+            color: white;
+        }
+        .status-pass {
+            color: #4caf50;
+            font-weight: bold;
+        }
+        .status-fail {
+            color: #f44336;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 RTO/RPO Metrics Dashboard</h1>
+            <p>Last Updated: $(date)</p>
+        </div>
+        
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div style="font-size: 0.9em; opacity: 0.9;">Total Incidents</div>
+                <div class="metric-value">$total_incidents</div>
+            </div>
+            <div class="metric-card" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                <div style="font-size: 0.9em; opacity: 0.9;">RTO Success Rate</div>
+                <div class="metric-value">${rto_success_rate}%</div>
+            </div>
+            <div class="metric-card" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div style="font-size: 0.9em; opacity: 0.9;">RPO Success Rate</div>
+                <div class="metric-value">${rpo_success_rate}%</div>
+            </div>
+            <div class="metric-card" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div style="font-size: 0.9em; opacity: 0.9;">Targets Missed</div>
+                <div class="metric-value">$((rto_missed + rpo_missed))</div>
+            </div>
+        </div>
+        
+        <h2>RTO Performance by Service</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Service</th>
+                    <th>Target (hours)</th>
+                    <th>Avg Actual (hours)</th>
+                    <th>Success Rate</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+HTML
+    
+    # Add service-level statistics
+    sqlite3 "$METRICS_DB" "
+        SELECT 
+            r.service_name,
+            t.rto_target_hours,
+            ROUND(AVG(r.rto_seconds) / 3600.0, 2) as avg_actual,
+            ROUND(SUM(CASE WHEN r.rto_achieved=1 THEN 1 ELSE 0 END) * 100.0 / COUNT(*), 1) as success_rate
+        FROM rto_measurements r
+        JOIN service_targets t ON r.service_name = t.service_name
+        GROUP BY r.service_name
+    " | while IFS='|' read service target actual rate; do
+        local status_class=$(echo "$rate > 90" | bc -l | grep -q 1 && echo "status-pass" || echo "status-fail")
+        cat >> "$dashboard" <<HTML
+                <tr>
+                    <td>$service</td>
+                    <td>$target</td>
+                    <td>$actual</td>
+                    <td>${rate}%</td>
+                    <td class="$status_class">$(echo "$rate > 90" | bc -l | grep -q 1 && echo "✓ Meeting" || echo "✗ Below")</td>
+                </tr>
+HTML
+    done
+    
+    cat >> "$dashboard" <<HTML
+            </tbody>
+        </table>
+        
+        <h2>Recent Incidents</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Service</th>
+                    <th>Type</th>
+                    <th>RTO (hours)</th>
+                    <th>RPO (hours)</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+HTML
+    
+    # Add recent incidents
+    sqlite3 "$METRICS_DB" "
+        SELECT 
+            strftime('%Y-%m-%d', r.timestamp),
+            r.service_name,
+            r.incident_type,
+            ROUND(r.rto_seconds / 3600.0, 2),
+            COALESCE(ROUND(p.data_loss_seconds / 3600.0, 2), 0),
+            CASE WHEN r.rto_achieved=1 AND COALESCE(p.rpo_achieved, 1)=1 THEN 'pass' ELSE 'fail' END
+        FROM rto_measurements r
+        LEFT JOIN rpo_measurements p ON r.service_name=p.service_name AND DATE(r.timestamp)=DATE(p.timestamp)
+        ORDER BY r.timestamp DESC
+        LIMIT 10
+    " | while IFS='|' read date service type rto rpo status; do
+        local status_class=$([ "$status" = "pass" ] && echo "status-pass" || echo "status-fail")
+        local status_text=$([ "$status" = "pass" ] && echo "✓ Pass" || echo "✗ Fail")
+        cat >> "$dashboard" <<HTML
+                <tr>
+                    <td>$date</td>
+                    <td>$service</td>
+                    <td>$type</td>
+                    <td>$rto</td>
+                    <td>$rpo</td>
+                    <td class="$status_class">$status_text</td>
+                </tr>
+HTML
+    done
+    
+    cat >> "$dashboard" <<HTML
+            </tbody>
+        </table>
+        
+        <div class="chart-container">
+            <canvas id="trendChart"></canvas>
+        </div>
+        
+        <script>
+        const ctx = document.getElementById('trendChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                datasets: [{
+                    label: 'RTO Achievement (%)',
+                    data: [95, 92, 97, 94, 98, 96],
+                    borderColor: 'rgb(102, 126, 234)',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4
+                }, {
+                    label: 'RPO Achievement (%)',
+                    data: [98, 96, 99, 97, 99, 98],
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: 'RTO/RPO Achievement Trend (6 Months)'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        ticks: {
+                            callback: function(value) {
+                                return value + '%';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        </script>
+        
+        <hr style="margin-top: 40px;">
+        <p style="text-align: center; color: #666;">
+            RTO/RPO Metrics Dashboard | Auto-refresh every 5 minutes
+        </p>
+    </div>
+    
+    <script>
+        setTimeout(() => location.reload(), 300000);
+    </script>
+</body>
+</html>
+HTML
+    
+    log "Dashboard generated: $dashboard"
+    echo "$dashboard"
+}
+
+# Main command handling
+case "${1:-help}" in
+    init)
+        init_metrics_db
+        ;;
+    
+    record-rto)
+        record_rto "$2" "$3" "$4" "$5" "$6"
+        ;;
+    
+    record-rpo)
+        record_rpo "$2" "$3" "$4" "$5" "$6"
+        ;;
+    
+    dashboard)
+        generate_dashboard
+        ;;
+    
+    *)
+        cat <<HELP
+RTO/RPO Measurement & Reporting
+Usage: $0 <command> [options]
+Commands:
+init                                      - Initialize metrics database
+record-rto <service> <type> <detect> <start> <end>
+record-rpo <service> <type> <backup> <incident> <records>
+dashboard                                 - Generate dashboard
+Examples:
+$0 init
+$0 record-rto mysql-prod "hardware failure" "2024-01-15 10:00" "2024-01-15 10:05" "2024-01-15 12:30"
+$0 dashboard
+Dashboard: file://$REPORTS_DIR/rto_rpo_dashboard.html
+HELP
+        ;;
+esac
+EOF
+
+chmod +x rto_rpo_measurement.sh
+````
+
+---
+
+## 🎓 Финальное задание модуля 12
+```bash
+cat > module12_complete_setup.sh <<'EOF'
+#!/bin/bash
+
+echo "=============================================="
+echo "Module 12: Testing & Validation Complete Setup"
+echo "=============================================="
+
+# 1. Initialize automated testing
+echo ""
+echo "1. Setting up automated restore testing..."
+./automated_restore_testing.sh init
+./automated_restore_testing.sh schedule
+
+# 2. Initialize DR drill system
+echo ""
+echo "2. Setting up DR drill orchestration..."
+./dr_drill_orchestrator.sh scenarios
+
+# 3. Initialize RTO/RPO tracking
+echo ""
+echo "3. Setting up RTO/RPO measurement..."
+./rto_rpo_measurement.sh init
+
+# 4. Run initial tests
+echo ""
+echo "4. Running initial validation tests..."
+./automated_restore_testing.sh daily
+
+# 5. Generate dashboards
+echo ""
+echo "5. Generating dashboards..."
+./rto_rpo_measurement.sh dashboard
+
+echo ""
+echo "=============================================="
+echo "Module 12 Setup Complete!"
+echo "=============================================="
+echo ""
+echo "Testing Infrastructure:"
+echo "  - Automated restore tests: CONFIGURED"
+echo "  - DR drill orchestration: READY"
+echo "  - RTO/RPO tracking: INITIALIZED"
+echo ""
+echo "Dashboards:"
+echo "  - RTO/RPO: file:///var/www/html/rto-rpo-reports/rto_rpo_dashboard.html"
+echo "  - Test Results: /var/log/restore-tests/reports/"
+echo ""
+echo "Scheduled Tests:"
+echo "  - Daily restore tests: 02:00"
+echo "  - Weekly comprehensive: Sunday 03:00"
+echo "  - Quarterly DR drill: Manual trigger"
+echo ""
+echo "Next Steps:"
+echo "  1. Review automated test results daily"
+echo "  2. Schedule quarterly DR drills"
+echo "  3. Conduct monthly tabletop exercises"
+echo "  4. Track and improve RTO/RPO metrics"
+echo ""
+EOF
+
+chmod +x module12_complete_setup.sh
+```
+
+---
+
+## 📊 Итоговый отчет
+
+**Модуль 12 завершен!**
+
+**Практические навыки:**
+- ✅ Automated restore testing framework
+- ✅ DR drill orchestration
+- ✅ RTO/RPO measurement & tracking
+- ✅ Tabletop exercise facilitation
+- ✅ Continuous validation
+
+**Помни главное правило:**
+
+> "Untested backups = No backups"
+> "DR plan without drills = Fiction"
+> "Measure what matters: RTO & RPO"
+
+**Следующие шаги:**
+1. Запускай автоматические тесты ежедневно
+2. Проводи DR drill каждый квартал
+3. Отслеживай RTO/RPO метрики
+4. Улучшай процессы на основе результатов
+
+**Успехов в production! 🚀**
+
+

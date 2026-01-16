@@ -1354,7 +1354,7 @@ graph LR
     C --> D[Database]
     C --> E[Cache]
 ```
-
+```
 ## Contact
 - Team: @team-name
 - Support: support@example.com

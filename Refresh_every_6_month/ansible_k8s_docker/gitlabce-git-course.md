@@ -1880,11 +1880,11 @@ pytest tests/
 3. Fill in the MR template
 4. Wait for review
 EOF
-
+```
 git add CONTRIBUTING.md
 git commit -m "Add contributing guidelines"
 git push
-
+```
 
 ### 🚀 Бонус (новое)
 

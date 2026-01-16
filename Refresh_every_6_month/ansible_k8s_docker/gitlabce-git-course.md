@@ -1884,7 +1884,7 @@ EOF
 git add CONTRIBUTING.md
 git commit -m "Add contributing guidelines"
 git push
-```
+
 
 ### 🚀 Бонус (новое)
 

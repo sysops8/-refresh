@@ -617,7 +617,7 @@ Title: Draft: Add feature X
 ```suggestion
 def improved_function():
     return "Better implementation"
-```
+
 
 # Автор может применить одним кликом
 ```

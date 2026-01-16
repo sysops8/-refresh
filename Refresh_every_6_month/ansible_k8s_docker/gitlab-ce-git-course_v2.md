@@ -613,6 +613,7 @@ Title: Draft: Add feature X
 
 **Suggestions в Code Review:**
 Что это такое? 
+
 **Suggestion** — это специальный тип комментария, который автор MR может применить одним кликом.
 ```markdown
 # Оставь комментарий с suggestion

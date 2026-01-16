@@ -614,10 +614,10 @@ Title: Draft: Add feature X
 **Suggestions в Code Review:**
 ```markdown
 # Оставь комментарий с suggestion
+# Что это такое? **Suggestion** — это специальный тип комментария, который автор MR может применить одним кликом.
 ```suggestion
 def improved_function():
     return "Better implementation"
-
 
 # Автор может применить одним кликом
 ```

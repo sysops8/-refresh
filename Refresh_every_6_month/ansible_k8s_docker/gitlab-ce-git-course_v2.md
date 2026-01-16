@@ -1569,7 +1569,7 @@ git add CONTRIBUTING.md
 git commit -m "Add contributing guidelines"
 git push
 ```
-
+```
 ### 🚀 Бонус (новое)
 
 **1. Используй Pages для статической документации:**

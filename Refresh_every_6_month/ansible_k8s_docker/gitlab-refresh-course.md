@@ -342,7 +342,7 @@ Protected Branches:
 // Предлагаемый код
 const result = newFunction();
 ```
-```
+
 
 ### 💻 Задание
 

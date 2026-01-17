@@ -246,7 +246,7 @@ Plugins.SystemRun.LogRemoteCommands=1
 Plugins.Docker.Endpoint=unix:///var/run/docker.sock
 
 # Redis monitoring
-Plugins.Redis.Uri=tcp://localhost:6379
+Plugins.Redis.Sessions.default.Uri=tcp://localhost:6379
 
 # PostgreSQL monitoring
 Plugins.PostgreSQL.Uri=tcp://localhost:5432

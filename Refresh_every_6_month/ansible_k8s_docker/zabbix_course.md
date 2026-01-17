@@ -217,7 +217,7 @@ zabbix_agent2 -p
 3. **Добавь первый хост**
    - Monitoring (Configuration) → Hosts → Create host
    - Host name: TestServer
-   - Templates: Operation systems → Linux by Zabbix agent
+   - Templates: Operating systems → Linux by Zabbix agent
    - Agent: DNS name или IP адрес агента
    - Port: 10050
 

@@ -215,7 +215,7 @@ zabbix_agent2 -p
    - Смени пароль на безопасный
 
 3. **Добавь первый хост**
-   - Monitoring (Configuration) → Hosts → Create host
+   - Monitoring (или Configuration) → Hosts → Create host
    - Host name: TestServer
    - Templates: Operating systems → Linux by Zabbix agent
    - Agent: DNS name или IP адрес агента
@@ -227,7 +227,7 @@ zabbix_agent2 -p
    - Проверь поступление данных (CPU, Memory, Disk)
 
 5. **Создай простой триггер**
-   - Configuration → Hosts → TestServer → Triggers
+   - Monitoring (или Configuration) → Hosts → TestServer → Triggers
    - Name: High CPU usage
    - Expression: `avg(/TestServer/system.cpu.util,5m)>80`
    - Severity: Warning

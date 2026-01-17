@@ -432,7 +432,7 @@ EOF
 chmod +x /usr/local/bin/check_service.sh
    
 # Добавь UserParameter
-cat > /etc/zabbix/zabbix_agent2.d/custom.conf <<EOF
+cat > /etc/zabbix/zabbix_agent2.d/custom.conf <<`EOF`
 UserParameter=custom.service.status[*],/usr/local/bin/check_service.sh $1
 UserParameter=custom.disk.usage,df -h / | awk 'NR==2 {print $5}' | sed 's/%//'
 EOF

@@ -418,30 +418,30 @@ avg(//system.cpu.util,5m)
    
    На хосте с агентом:
 ```bash
-   # Создай скрипт
-   cat > /usr/local/bin/check_service.sh <<'EOF'
-   #!/bin/bash
-   SERVICE=$1
-   if systemctl is-active --quiet $SERVICE; then
-     echo 1
-   else
-     echo 0
-   fi
-   EOF
+# Создай скрипт
+cat > /usr/local/bin/check_service.sh <<'EOF'
+#!/bin/bash
+SERVICE=$1
+if systemctl is-active --quiet $SERVICE; then
+ echo 1
+else
+ echo 0
+fi
+EOF
+
+chmod +x /usr/local/bin/check_service.sh
    
-   chmod +x /usr/local/bin/check_service.sh
-   
-   # Добавь UserParameter
-   cat > /etc/zabbix/zabbix_agent2.d/custom.conf <<EOF
-   UserParameter=custom.service.status[*],/usr/local/bin/check_service.sh $1
-   UserParameter=custom.disk.usage,df -h / | awk 'NR==2 {print $5}' | sed 's/%//'
-   EOF
-   
-   # Перезапусти агент
-   systemctl restart zabbix-agent2
-   
-   # Тест
-   zabbix_agent2 -t custom.service.status[nginx]
+# Добавь UserParameter
+cat > /etc/zabbix/zabbix_agent2.d/custom.conf <<EOF
+UserParameter=custom.service.status[*],/usr/local/bin/check_service.sh $1
+UserParameter=custom.disk.usage,df -h / | awk 'NR==2 {print $5}' | sed 's/%//'
+EOF
+
+# Перезапусти агент
+systemctl restart zabbix-agent2
+
+# Тест
+zabbix_agent2 -t custom.service.status[nginx]
 ```
 
 2. **Добавь item в Zabbix**
